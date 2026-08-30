@@ -121,6 +121,7 @@ class TripLogModel {
   final String mode; // "drive" or "transit"
   final double cost;
   final double savedVsAlternative;
+  final double distanceKm; // real distance travelled, used for CO2 estimate
   final String createdOn; // stored as ISO date string
 
   TripLogModel({
@@ -129,6 +130,7 @@ class TripLogModel {
     required this.mode,
     required this.cost,
     required this.savedVsAlternative,
+    required this.distanceKm,
     required this.createdOn,
   });
 
@@ -138,6 +140,7 @@ class TripLogModel {
         mode: data['mode'],
         cost: (data['cost'] as num).toDouble(),
         savedVsAlternative: (data['savedVsAlternative'] as num).toDouble(),
+        distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0,
         createdOn: data['createdOn'],
       );
 
@@ -147,6 +150,7 @@ class TripLogModel {
         'mode': mode,
         'cost': cost,
         'savedVsAlternative': savedVsAlternative,
+        'distanceKm': distanceKm,
         'createdOn': createdOn,
       };
 }

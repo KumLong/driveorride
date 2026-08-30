@@ -23,7 +23,13 @@ class DatabaseService {
   Future<Database> _initDatabase() async {
     final directory = await getApplicationDocumentsDirectory();
     final path = join(directory.path, 'driveorride.db');
-    return await openDatabase(path, version: 1, onCreate: _onCreate);
+    return await openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
+  }
+
+  void _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE trip_logs ADD COLUMN distanceKm REAL DEFAULT 0');
+    }
   }
 
   void _onCreate(Database db, int version) async {
@@ -49,6 +55,7 @@ class DatabaseService {
       'mode TEXT, '
       'cost REAL, '
       'savedVsAlternative REAL, '
+      'distanceKm REAL DEFAULT 0, '
       'createdOn DATETIME DEFAULT CURRENT_TIMESTAMP)',
     );
     log('TABLES CREATED');
