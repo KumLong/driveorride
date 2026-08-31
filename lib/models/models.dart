@@ -2,6 +2,38 @@
 // Core data models used across the app.
 // ─────────────────────────────────────────────────────────────
 
+/// A user's profile — stored in Supabase's `profiles` table, created at
+/// registration to match `auth.users`. Read-only here (registration writes
+/// it, profile screen just displays it).
+class ProfileModel {
+  final String id;
+  final String fullName;
+  final String email;
+  final String phone;
+
+  ProfileModel({
+    required this.id,
+    required this.fullName,
+    required this.email,
+    required this.phone,
+  });
+
+  factory ProfileModel.fromJson(Map<String, dynamic> data) => ProfileModel(
+    id: data['id'],
+    fullName: data['full_name'] ?? '',
+    email: data['email'] ?? '',
+    phone: data['phone'] ?? '',
+  );
+
+  /// Initials for the avatar circle, e.g. "Lee Wei Jian" -> "LW"
+  String get initials {
+    final parts = fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+    if (parts.isEmpty) return '?';
+    if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
+    return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+  }
+}
+
 /// A single transit station, read from the real GTFS stops.txt
 /// (verified from your downloaded gtfs_rapid_rail_kl.zip)
 class Station {
@@ -66,20 +98,20 @@ class SavedLocationModel {
   });
 
   factory SavedLocationModel.fromJson(Map<String, dynamic> data) => SavedLocationModel(
-        id: data['id'],
-        label: data['label'],
-        address: data['address'],
-        lat: data['lat'],
-        lon: data['lon'],
-      );
+    id: data['id'],
+    label: data['label'],
+    address: data['address'],
+    lat: data['lat'],
+    lon: data['lon'],
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'label': label,
-        'address': address,
-        'lat': lat,
-        'lon': lon,
-      };
+    if (id != null) 'id': id,
+    'label': label,
+    'address': address,
+    'lat': lat,
+    'lon': lon,
+  };
 }
 
 /// A savings goal set by the user — stored in SQLite. Full CRUD.
@@ -100,18 +132,18 @@ class SavingsGoalModel {
       targetAmount == 0 ? 0 : (savedAmount / targetAmount).clamp(0, 1) * 100;
 
   factory SavingsGoalModel.fromJson(Map<String, dynamic> data) => SavingsGoalModel(
-        id: data['id'],
-        name: data['name'],
-        targetAmount: (data['targetAmount'] as num).toDouble(),
-        savedAmount: (data['savedAmount'] as num).toDouble(),
-      );
+    id: data['id'],
+    name: data['name'],
+    targetAmount: (data['targetAmount'] as num).toDouble(),
+    savedAmount: (data['savedAmount'] as num).toDouble(),
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'name': name,
-        'targetAmount': targetAmount,
-        'savedAmount': savedAmount,
-      };
+    if (id != null) 'id': id,
+    'name': name,
+    'targetAmount': targetAmount,
+    'savedAmount': savedAmount,
+  };
 }
 
 /// A logged trip in the user's history — stored in SQLite. Full CRUD.
@@ -135,22 +167,22 @@ class TripLogModel {
   });
 
   factory TripLogModel.fromJson(Map<String, dynamic> data) => TripLogModel(
-        id: data['id'],
-        route: data['route'],
-        mode: data['mode'],
-        cost: (data['cost'] as num).toDouble(),
-        savedVsAlternative: (data['savedVsAlternative'] as num).toDouble(),
-        distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0,
-        createdOn: data['createdOn'],
-      );
+    id: data['id'],
+    route: data['route'],
+    mode: data['mode'],
+    cost: (data['cost'] as num).toDouble(),
+    savedVsAlternative: (data['savedVsAlternative'] as num).toDouble(),
+    distanceKm: (data['distanceKm'] as num?)?.toDouble() ?? 0,
+    createdOn: data['createdOn'],
+  );
 
   Map<String, dynamic> toMap() => {
-        if (id != null) 'id': id,
-        'route': route,
-        'mode': mode,
-        'cost': cost,
-        'savedVsAlternative': savedVsAlternative,
-        'distanceKm': distanceKm,
-        'createdOn': createdOn,
-      };
+    if (id != null) 'id': id,
+    'route': route,
+    'mode': mode,
+    'cost': cost,
+    'savedVsAlternative': savedVsAlternative,
+    'distanceKm': distanceKm,
+    'createdOn': createdOn,
+  };
 }

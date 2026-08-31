@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import 'main_shell.dart';
@@ -18,18 +19,51 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   String? _error;
 
+  static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
   Future<void> _login() async {
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Please enter both email and password.');
+      return;
+    }
+    if (!_emailPattern.hasMatch(email)) {
+      setState(() => _error = 'Please enter a valid email address.');
+      return;
+    }
+
     setState(() { _loading = true; _error = null; });
     try {
-      await _auth.login(_emailCtrl.text.trim(), _passwordCtrl.text);
+      await _auth.login(email, password);
       if (mounted) {
         Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const MainShell()), (route) => false);
       }
+    } on AuthException catch (e) {
+      setState(() => _error = _friendlyLoginError(e));
     } catch (e) {
-      setState(() => _error = 'Login failed: check your email/password, or that Supabase is configured (see main.dart).');
+      setState(() => _error = 'Something went wrong. Please check your connection and try again.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  /// Maps Supabase's raw auth error text to a plain, user-facing message —
+  /// the person logging in doesn't know what "Supabase" is and shouldn't
+  /// need to.
+  String _friendlyLoginError(AuthException e) {
+    final msg = e.message.toLowerCase();
+    if (msg.contains('invalid login credentials') || msg.contains('invalid email or password')) {
+      return 'Invalid email or password.';
+    }
+    if (msg.contains('email not confirmed')) {
+      return 'Please confirm your email before logging in. Check your inbox for the confirmation link.';
+    }
+    if (msg.contains('too many requests') || msg.contains('rate limit')) {
+      return 'Too many attempts. Please wait a moment and try again.';
+    }
+    return 'Invalid email or password.';
   }
 
   @override

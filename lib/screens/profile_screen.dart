@@ -1,9 +1,83 @@
 import 'package:flutter/material.dart';
 import 'saved_locations_screen.dart';
+import 'splash_screen.dart';
+import 'info_screen.dart';
+import '../services/auth_service.dart';
+import '../models/models.dart';
 import '../theme.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final _auth = AuthService();
+  ProfileModel? _profile;
+  bool _loading = true;
+  bool _notificationsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final profile = await _auth.fetchCurrentProfile();
+      if (mounted) setState(() { _profile = profile; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _editProfile() async {
+    final nameCtrl = TextEditingController(text: _profile?.fullName ?? '');
+    final phoneCtrl = TextEditingController(text: _profile?.phone ?? '');
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Profile'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+            const SizedBox(height: 12),
+            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (saved != true) return;
+    if (nameCtrl.text.trim().isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name cannot be empty.')));
+      return;
+    }
+
+    try {
+      await _auth.updateProfile(fullName: nameCtrl.text.trim(), phone: phoneCtrl.text.trim());
+      await _loadProfile();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.')));
+    }
+  }
+
+  Future<void> _logout() async {
+    await _auth.logout();
+    if (mounted) {
+      Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const SplashScreen()), (route) => false);
+    }
+  }
 
   Widget _sectionCard(String title, List<Widget> children) {
     return Container(
@@ -69,20 +143,40 @@ class ProfileScreen extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const CircleAvatar(radius: 30, backgroundColor: AppColors.mint, child: Text('AH', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-                  const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Amir Hadziq', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white)),
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                        child: const Text('Eco Commuter', style: TextStyle(color: AppColors.mint, fontSize: 11, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: AppColors.mint,
+                    child: _loading
+                        ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                        : Text(_profile?.initials ?? '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _loading ? 'Loading…' : (_profile?.fullName ?? 'No profile found'),
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
+                        ),
+                        Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
+                          child: const Text('Eco Commuter', style: TextStyle(color: AppColors.mint, fontSize: 11, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (!_loading)
+                    IconButton(
+                      onPressed: _editProfile,
+                      icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 20),
+                      tooltip: 'Edit Profile',
+                    ),
                 ],
               ),
             ),
@@ -97,12 +191,27 @@ class ProfileScreen extends StatelessWidget {
                 ]),
                 _sectionCard('NOTIFICATIONS', [
                   _row(context, icon: Icons.notifications_none, label: 'Daily Commute Reminder', sub: '7:30 AM on weekdays',
-                      trailing: Switch(value: true, activeColor: AppColors.mint, onChanged: (_) {})),
+                      trailing: Switch(
+                        value: _notificationsEnabled,
+                        activeColor: AppColors.mint,
+                        onChanged: (value) {
+                          setState(() => _notificationsEnabled = value);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(value ? 'Daily commute reminder turned on.' : 'Daily commute reminder turned off.')),
+                          );
+                        },
+                      )),
                 ]),
                 _sectionCard('ABOUT', [
-                  _row(context, icon: Icons.info_outline, label: 'About DriveOrRide', sub: 'v1.0.0 · Built for Malaysia', onTap: () {}),
-                  _row(context, icon: Icons.description_outlined, label: 'Terms & Conditions', onTap: () {}),
-                  _row(context, icon: Icons.privacy_tip_outlined, label: 'Privacy Policy', onTap: () {}),
+                  _row(context, icon: Icons.info_outline, label: 'About DriveOrRide', sub: 'v1.0.0 · Built for Malaysia',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'About DriveOrRide', sections: AppInfoContent.about)))),
+                  _row(context, icon: Icons.description_outlined, label: 'Terms & Conditions',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'Terms & Conditions', sections: AppInfoContent.terms)))),
+                  _row(context, icon: Icons.privacy_tip_outlined, label: 'Privacy Policy',
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'Privacy Policy', sections: AppInfoContent.privacy)))),
+                ]),
+                _sectionCard('ACCOUNT', [
+                  _row(context, icon: Icons.logout, label: 'Log Out', onTap: _logout),
                 ]),
                 const SizedBox(height: 8),
                 const Center(child: Text('Powered by open mobility data · SDG Goal 9 🇲🇾', style: TextStyle(fontSize: 10, color: Colors.grey))),
