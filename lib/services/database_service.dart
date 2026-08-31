@@ -130,8 +130,8 @@ class DatabaseService {
   Future<void> insertTrip(TripLogModel trip) async {
     final db = await database;
     await db.rawInsert(
-      'INSERT INTO trip_logs(route, mode, cost, savedVsAlternative, createdOn) VALUES(?,?,?,?,?)',
-      [trip.route, trip.mode, trip.cost, trip.savedVsAlternative, trip.createdOn],
+      'INSERT INTO trip_logs(route, mode, cost, savedVsAlternative, distanceKm, createdOn) VALUES(?,?,?,?,?,?)',
+      [trip.route, trip.mode, trip.cost, trip.savedVsAlternative, trip.distanceKm, trip.createdOn],
     );
     log('TRIP INSERTED');
   }

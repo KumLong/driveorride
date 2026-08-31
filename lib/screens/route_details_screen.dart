@@ -12,7 +12,9 @@ import 'confirm_choice_screen.dart';
 class RouteDetailsScreen extends StatefulWidget {
   final LatLng origin;
   final LatLng destination;
-  const RouteDetailsScreen({super.key, required this.origin, required this.destination});
+  final String originName;
+  final String destinationName;
+  const RouteDetailsScreen({super.key, required this.origin, required this.destination, required this.originName, required this.destinationName});
 
   @override
   State<RouteDetailsScreen> createState() => _RouteDetailsScreenState();
@@ -153,6 +155,8 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => ConfirmChoiceScreen(
         destination: widget.destination,
+        originName: widget.originName,
+        destinationName: widget.destinationName,
         driveRoutePoints: _driveRoutePoints,
         driveDistanceKm: _driveDistanceKm,
         driveDurationMin: _driveDurationMin,

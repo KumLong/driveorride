@@ -19,6 +19,7 @@ class SupabaseService {
       'mode': trip.mode,
       'cost': trip.cost,
       'savedVsAlternative': trip.savedVsAlternative,
+      'distanceKm': trip.distanceKm, // was missing before — same bug as SQLite's insert
       'createdOn': trip.createdOn,
     });
   }
@@ -30,7 +31,24 @@ class SupabaseService {
         .toList();
   }
 
-  Future<void> deleteTrip(int remoteId) async {
-    await _client.from('trip_logs').delete().eq('id', remoteId);
+  /// Deletes ONE remote trip, matched by route + exact timestamp
+  /// (createdOn) rather than by ID — the local SQLite row's ID and the
+  /// remote Supabase row's ID are two independent, unrelated sequences
+  /// (each database assigns its own), so matching on the data itself
+  /// is the reliable way to find the corresponding remote record.
+  Future<void> deleteTripByMatch(String route, String createdOn) async {
+    await _client.from('trip_logs').delete().eq('route', route).eq('createdOn', createdOn);
+  }
+
+  /// Deletes every trip in the remote table — used to keep "Clear All"
+  /// consistent between local (SQLite) and remote (Supabase), instead
+  /// of only clearing the local copy.
+  ///
+  /// Filters on createdOn (guaranteed to exist and never empty) rather
+  /// than "id" — this avoids depending on whether your Supabase table
+  /// happens to have an id/primary key column set up, since that's not
+  /// something this app otherwise requires.
+  Future<void> deleteAllTrips() async {
+    await _client.from('trip_logs').delete().neq('createdOn', '');
   }
 }

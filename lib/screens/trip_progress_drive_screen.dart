@@ -11,6 +11,7 @@ import 'stop_trip_screen.dart';
 /// package pattern. Shows a moving "you are here" dot on the map.
 class TripProgressDriveScreen extends StatefulWidget {
   final LatLng destination;
+  final String routeName;
   final List<LatLng> routePoints;
   final double distanceKm;
   final double cost;
@@ -18,6 +19,7 @@ class TripProgressDriveScreen extends StatefulWidget {
   const TripProgressDriveScreen({
     super.key,
     required this.destination,
+    required this.routeName,
     required this.routePoints,
     required this.distanceKm,
     required this.cost,
@@ -69,7 +71,7 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
 
   void _onArrived() {
     Navigator.pushReplacement(context, MaterialPageRoute(
-      builder: (_) => TripSummaryScreen(route: 'Drive trip', mode: 'drive', cost: widget.cost, savedVsAlternative: widget.savedVsAlternative, distanceKm: widget.distanceKm),
+      builder: (_) => TripSummaryScreen(route: widget.routeName, mode: 'drive', cost: widget.cost, savedVsAlternative: widget.savedVsAlternative, distanceKm: widget.distanceKm),
     ));
   }
 

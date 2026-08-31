@@ -9,7 +9,9 @@ import 'route_details_screen.dart';
 class CompareScreen extends StatefulWidget {
   final LatLng origin;
   final LatLng destination;
-  const CompareScreen({super.key, required this.origin, required this.destination});
+  final String originName;
+  final String destinationName;
+  const CompareScreen({super.key, required this.origin, required this.destination, required this.originName, required this.destinationName});
 
   @override
   State<CompareScreen> createState() => _CompareScreenState();
@@ -86,12 +88,12 @@ class _CompareScreenState extends State<CompareScreen> {
                     children: [
                       const Icon(Icons.circle, size: 10, color: AppColors.teal),
                       const SizedBox(width: 8),
-                      const Expanded(child: Text('Kuala Lumpur Sentral', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
+                      Expanded(child: Text(widget.originName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
                       Icon(Icons.arrow_forward, size: 14, color: Colors.grey.shade400),
                       const SizedBox(width: 8),
                       const Icon(Icons.location_on, size: 14, color: AppColors.amber),
                       const SizedBox(width: 4),
-                      const Text('Destination', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Expanded(child: Text(widget.destinationName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                 ),
@@ -202,7 +204,12 @@ class _CompareScreenState extends State<CompareScreen> {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RouteDetailsScreen(origin: widget.origin, destination: widget.destination))),
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => RouteDetailsScreen(
+                      origin: widget.origin,
+                      destination: widget.destination,
+                      originName: widget.originName,
+                      destinationName: widget.destinationName,
+                    ))),
                     child: const Text('See Details →'),
                   ),
                 ),

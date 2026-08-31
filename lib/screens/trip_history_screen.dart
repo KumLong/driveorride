@@ -53,8 +53,14 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     _refresh();
   }
 
-  Future<void> _deleteTrip(int id) async {
-    await _db.deleteTrip(id);
+  Future<void> _deleteTrip(TripLogModel trip) async {
+    await _db.deleteTrip(trip.id!); // local
+    try {
+      await _supabase.deleteTripByMatch(trip.route, trip.createdOn); // remote — keeps both in sync
+    } catch (e) {
+      // ignore: avoid_print
+      print('Supabase delete failed (local delete still succeeded): $e');
+    }
     _refresh();
   }
 
@@ -75,6 +81,39 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     }
     return spots;
   }
+
+  /// Rounds the chart's top value up to a clean number (e.g. next
+  /// multiple of 5, 10, 20...) so axis labels land on tidy values
+  /// instead of fl_chart auto-picking an interval that overlaps labels
+  /// (which is what caused the "1.26" overlapping "1.00" issue).
+  /// Rounds a value down to a clean number matching the chart's scale
+  /// (nearest 10 for small ranges, 20/50 for larger ones).
+  double _roundDownToStep(double value, double step) => (value / step).floor() * step;
+  double _roundUpToStep(double value, double step) => (value / step).ceil() * step;
+
+  /// Instead of always starting the Y-axis at RM 0 (which squashes the
+  /// line into a tiny sliver at the top if savings are already large,
+  /// e.g. sitting around RM 140-150), this zooms into the actual range
+  /// of the real data — showing meaningful variation instead of a
+  /// near-flat line.
+  double get _chartMinY {
+    if (_savingsOverTimeSpots.isEmpty) return 0;
+    final minVal = _savingsOverTimeSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
+    final step = minVal <= 50 ? 10.0 : (minVal <= 200 ? 20.0 : 50.0);
+    final rounded = _roundDownToStep(minVal, step);
+    return rounded < 0 ? 0 : rounded;
+  }
+
+  double get _chartMaxY {
+    if (_savingsOverTimeSpots.isEmpty) return 10;
+    final maxVal = _savingsOverTimeSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    final step = maxVal <= 50 ? 10.0 : (maxVal <= 200 ? 20.0 : 50.0);
+    final rounded = _roundUpToStep(maxVal, step);
+    // Ensure there's always some visible range even if all values are equal.
+    return rounded <= _chartMinY ? _chartMinY + step : rounded;
+  }
+
+  double get _chartYInterval => ((_chartMaxY - _chartMinY) / 4).clamp(1, double.infinity);
 
   void _showAddTripForm() {
     final routeCtrl = TextEditingController();
@@ -135,12 +174,18 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear all trip history?'),
-        content: const Text('This deletes every logged trip and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone — useful for testing, but be sure before confirming.'),
+        content: const Text('This deletes every logged trip — both on this device AND in the cloud (Supabase) — and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone — useful for testing, but be sure before confirming.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
-              await _db.clearAllTrips();
+              await _db.clearAllTrips(); // local
+              try {
+                await _supabase.deleteAllTrips(); // remote — keeps both in sync
+              } catch (e) {
+                // ignore: avoid_print
+                print('Supabase clear-all failed (local clear still succeeded): $e');
+              }
               if (ctx.mounted) Navigator.pop(ctx);
               _refresh();
             },
@@ -205,15 +250,40 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                   const Text('Savings Over Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.teal)),
                   const SizedBox(height: 12),
                   SizedBox(
-                    height: 140,
+                    height: 160,
                     child: LineChart(LineChartData(
-                      gridData: const FlGridData(show: true, drawVerticalLine: false),
-                      titlesData: const FlTitlesData(
-                        rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: _chartYInterval,
+                        getDrawingHorizontalLine: (value) => FlLine(color: Colors.grey.shade200, strokeWidth: 1),
+                      ),
+                      minY: _chartMinY,
+                      maxY: _chartMaxY,
+                      titlesData: FlTitlesData(
+                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 42,
+                            interval: _chartYInterval,
+                            getTitlesWidget: (value, meta) => Text('RM${value.toStringAsFixed(0)}', style: const TextStyle(fontSize: 9, color: Colors.grey)),
+                          ),
+                        ),
                       ),
                       borderData: FlBorderData(show: false),
+                      lineTouchData: LineTouchData(
+                        touchTooltipData: LineTouchTooltipData(
+                          getTooltipColor: (_) => AppColors.teal,
+                          tooltipBorderRadius: BorderRadius.circular(8),
+                          getTooltipItems: (spots) => spots.map((spot) => LineTooltipItem(
+                            'RM ${spot.y.toStringAsFixed(2)}',
+                            const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                          )).toList(),
+                        ),
+                      ),
                       lineBarsData: [
                         LineChartBarData(
                           spots: _savingsOverTimeSpots,
@@ -245,7 +315,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.mint, fontWeight: FontWeight.bold)),
-                        IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteTrip(trip.id!)),
+                        IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteTrip(trip)),
                       ],
                     ),
                   ),

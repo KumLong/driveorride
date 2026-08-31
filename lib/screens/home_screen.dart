@@ -76,7 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (mounted) {
-      await Navigator.push(context, MaterialPageRoute(builder: (_) => CompareScreen(origin: origin, destination: destination)));
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => CompareScreen(
+        origin: origin,
+        destination: destination,
+        originName: _fromCtrl.text,
+        destinationName: _toCtrl.text,
+      )));
       _refreshRealData();
     }
   }
@@ -300,9 +305,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (_recentTrips.isEmpty)
                     Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-                      child: const Text('No trips yet — try comparing a route above!', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200, width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 44, height: 44,
+                            decoration: BoxDecoration(color: AppColors.mintLight, shape: BoxShape.circle),
+                            child: const Icon(Icons.route_outlined, color: AppColors.mint, size: 22),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text('No trips yet', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.teal)),
+                          const SizedBox(height: 2),
+                          const Text('Try comparing a route above to get started!', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
+                      ),
                     )
                   else
                     ..._recentTrips.map((trip) => GestureDetector(

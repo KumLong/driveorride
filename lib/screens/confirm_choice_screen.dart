@@ -11,6 +11,8 @@ import 'trip_progress_transit_screen.dart';
 /// the trip actually starts.
 class ConfirmChoiceScreen extends StatefulWidget {
   final LatLng destination;
+  final String originName;
+  final String destinationName;
   final List<LatLng> driveRoutePoints;
   final double driveDistanceKm;
   final double driveDurationMin;
@@ -21,6 +23,8 @@ class ConfirmChoiceScreen extends StatefulWidget {
   const ConfirmChoiceScreen({
     super.key,
     required this.destination,
+    required this.originName,
+    required this.destinationName,
     required this.driveRoutePoints,
     required this.driveDistanceKm,
     required this.driveDurationMin,
@@ -43,6 +47,7 @@ class _ConfirmChoiceScreenState extends State<ConfirmChoiceScreen> {
       Navigator.push(context, MaterialPageRoute(
         builder: (_) => TripProgressDriveScreen(
           destination: widget.destination,
+          routeName: '${widget.originName} -> ${widget.destinationName}',
           routePoints: widget.driveRoutePoints,
           distanceKm: widget.driveDistanceKm,
           cost: widget.driveCost,
