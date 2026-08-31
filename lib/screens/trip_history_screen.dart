@@ -130,11 +130,41 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     );
   }
 
+  void _confirmClearHistory() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear all trip history?'),
+        content: const Text('This deletes every logged trip and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone — useful for testing, but be sure before confirming.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              await _db.clearAllTrips();
+              if (ctx.mounted) Navigator.pop(ctx);
+              _refresh();
+            },
+            child: const Text('Clear Everything', style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('Track Savings')),
+      appBar: AppBar(
+        title: const Text('Track Savings'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_outlined),
+            tooltip: 'Clear all trip history',
+            onPressed: _confirmClearHistory,
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

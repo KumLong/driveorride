@@ -152,4 +152,12 @@ class DatabaseService {
     final trips = await getTrips();
     return trips.fold<double>(0.0, (double sum, t) => sum + t.savedVsAlternative);
   }
+
+  /// Deletes ALL trip logs — used for testing, so you can reset the
+  /// Track Savings numbers back to zero and verify a fresh calculation.
+  Future<void> clearAllTrips() async {
+    final db = await database;
+    await db.delete('trip_logs');
+    log('ALL TRIPS CLEARED');
+  }
 }

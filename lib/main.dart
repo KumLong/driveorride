@@ -9,8 +9,8 @@ final gtfsService = GtfsService(); // shared instance used across screens
 // ⚠️ REPLACE these with your own Supabase project's URL and anon key
 // once you have one — until then, the app still runs and shows the UI,
 // it just skips remote (Supabase) sync and falls back to local-only.
-const String supabaseUrl = 'YOUR_SUPABASE_PROJECT_URL';
-const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+const String supabaseUrl = 'https://ybqbfcpnmxhealnxozip.supabase.co';
+const String supabaseAnonKey = 'sb_publishable_JMYUjIJ81VMEeLG3EwmuXA_yFq3X247';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

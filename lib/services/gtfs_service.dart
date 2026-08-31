@@ -111,6 +111,14 @@ class GtfsService {
     }).toList();
   }
 
+  /// Finds the real station nearest to any coordinate — but only if
+  /// it's actually within a reasonable distance. Without this cutoff,
+  /// searching for a destination far outside the Klang Valley rail
+  /// network (e.g. Melaka) would still return the closest KL-area
+  /// station, even if it's 100+ km away — creating a nonsensical
+  /// "journey" that has nothing to do with the real destination.
+  static const _maxReasonableDistanceMeters = 20000; // 20 km
+
   Station? findNearestStation(LatLng point) {
     if (_stations.isEmpty) return null;
     final distance = Distance();
@@ -123,6 +131,7 @@ class GtfsService {
         nearest = station;
       }
     }
+    if (bestDist > _maxReasonableDistanceMeters) return null; // too far to be a real match
     return nearest;
   }
 
@@ -146,6 +155,20 @@ class GtfsService {
       return parts[0] * 60 + parts[1];
     }
     return toMinutes(end) - toMinutes(start);
+  }
+
+  /// Converts a raw GTFS time string ("07:05:00", 24-hour) into a
+  /// friendly display format ("7:05 AM"). GTFS times can technically
+  /// go past 24:00 for trips crossing midnight — handled by wrapping.
+  static String formatTime(String rawTime) {
+    final parts = rawTime.split(':').map(int.parse).toList();
+    int hour24 = parts[0] % 24;
+    final minute = parts[1];
+    final period = hour24 >= 12 ? 'PM' : 'AM';
+    int hour12 = hour24 % 12;
+    if (hour12 == 0) hour12 = 12;
+    final minuteStr = minute.toString().padLeft(2, '0');
+    return '$hour12:$minuteStr $period';
   }
 
   List<LatLng> _getShapePoints(String shapeId) {

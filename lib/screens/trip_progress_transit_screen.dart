@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../services/gtfs_service.dart';
 import '../main.dart' show gtfsService;
 import '../theme.dart';
@@ -6,8 +8,9 @@ import 'trip_summary_screen.dart';
 import 'stop_trip_screen.dart';
 
 /// Combines a MultiLegJourney's stops into one flat timeline (with a
-/// "Transfer" marker between legs, if any), and highlights the current
-/// stage based on the phone's clock vs. the real scheduled times.
+/// "Transfer" marker between legs, if any), shows the real route line
+/// on a map, and highlights the current stage based on the phone's
+/// clock vs. the real scheduled times.
 class TripProgressTransitScreen extends StatefulWidget {
   final MultiLegJourney journey;
   final double fare;
@@ -72,13 +75,51 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     ));
   }
 
+  /// All legs' route lines combined, so the map shows the whole
+  /// journey (including both segments if there's a transfer).
+  List<Polyline> get _mapPolylines {
+    return widget.journey.legs.map((leg) => Polyline(points: leg.shapePoints, color: AppColors.mint, strokeWidth: 4)).toList();
+  }
+
+  List<Marker> get _mapMarkers {
+    final markers = <Marker>[];
+    for (final leg in widget.journey.legs) {
+      markers.add(Marker(
+        point: LatLng(leg.boardStation.lat, leg.boardStation.lon),
+        width: 26, height: 26,
+        child: const Icon(Icons.trip_origin, color: AppColors.teal, size: 22),
+      ));
+      markers.add(Marker(
+        point: LatLng(leg.alightStation.lat, leg.alightStation.lon),
+        width: 26, height: 26,
+        child: const Icon(Icons.location_on, color: AppColors.amber, size: 26),
+      ));
+    }
+    return markers;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final originStation = widget.journey.legs.first.boardStation;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('On the Way')),
       body: Column(
         children: [
+          // Map showing the real route line(s) and stations — this was
+          // missing before; now shown just like the Route Details screen.
+          SizedBox(
+            height: 200,
+            child: FlutterMap(
+              options: MapOptions(initialCenter: LatLng(originStation.lat, originStation.lon), initialZoom: 12),
+              children: [
+                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.driveorride'),
+                PolylineLayer(polylines: _mapPolylines),
+                MarkerLayer(markers: _mapMarkers),
+              ],
+            ),
+          ),
           if (widget.journey.needsTransfer)
             Container(
               width: double.infinity,
@@ -117,7 +158,8 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                       decoration: BoxDecoration(shape: BoxShape.circle, color: isActive ? AppColors.mint : (isPast ? Colors.grey.shade300 : Colors.grey.shade400)),
                     ),
                     title: Text(step.stationName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isPast ? Colors.grey : AppColors.teal)),
-                    subtitle: Text(step.time ?? '', style: TextStyle(color: isPast ? Colors.grey.shade400 : Colors.grey)),
+                    // Times now formatted as "7:05 AM" instead of raw "07:05:00".
+                    subtitle: Text(step.time != null ? GtfsService.formatTime(step.time!) : '', style: TextStyle(color: isPast ? Colors.grey.shade400 : Colors.grey, fontWeight: FontWeight.w600)),
                     trailing: isActive
                         ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(20)), child: const Text('NOW', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))
                         : null,

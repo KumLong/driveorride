@@ -248,7 +248,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
             return ListTile(
               leading: Icon(isFirst ? Icons.trip_origin : (isLast ? Icons.flag : Icons.fiber_manual_record), size: isFirst || isLast ? 22 : 12, color: AppColors.mint),
               title: Text(station?.name ?? st.stopId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text(st.arrivalTime),
+              subtitle: Text(GtfsService.formatTime(st.arrivalTime)),
               dense: true,
             );
           }),
