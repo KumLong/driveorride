@@ -201,7 +201,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
-        title: const Text('Track Savings'),
+        title: const Text('History'),
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_sweep_outlined),

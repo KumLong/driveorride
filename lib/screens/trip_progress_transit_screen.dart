@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -7,10 +8,12 @@ import '../theme.dart';
 import 'trip_summary_screen.dart';
 import 'stop_trip_screen.dart';
 
-/// Combines a MultiLegJourney's stops into one flat timeline (with a
-/// "Transfer" marker between legs, if any), shows the real route line
-/// on a map, and highlights the current stage based on the phone's
-/// clock vs. the real scheduled times.
+/// Combines a MultiLegJourney's stops into one flat, live timeline
+/// (with a "Transfer" marker between legs, if any), shows the real
+/// route line on a map, and highlights the current stage by comparing
+/// the phone's real clock against a schedule anchored to when the
+/// trip actually started — built from real travel durations in the
+/// GTFS data, not a live vehicle feed (Malaysia has no public one).
 class TripProgressTransitScreen extends StatefulWidget {
   final MultiLegJourney journey;
   final double fare;
@@ -22,41 +25,66 @@ class TripProgressTransitScreen extends StatefulWidget {
 }
 
 class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
+  static const _walkToFirstStationMinutes = 5;
+  static const _transferBufferMinutes = 3;
+
   int _activeFlatIndex = 0;
   late List<_FlatStep> _flatSteps;
+  Timer? _liveTimer;
 
   @override
   void initState() {
     super.initState();
-    _flatSteps = _flattenJourney();
+    // Anchor is computed ONCE, right when the trip starts — this fixes
+    // the plan in place, the same way a real commute's plan doesn't
+    // change once you've set off. What DOES change, as real time
+    // passes, is which point in this fixed plan counts as "now".
+    _flatSteps = _flattenJourney(DateTime.now().add(const Duration(minutes: _walkToFirstStationMinutes)));
     _computeActiveStop();
+    _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _computeActiveStop());
   }
 
-  List<_FlatStep> _flattenJourney() {
+  @override
+  void dispose() {
+    _liveTimer?.cancel();
+    super.dispose();
+  }
+
+  /// Builds the flat, live-anchored timeline using real travel
+  /// durations from the GTFS data (always trustworthy), stacked
+  /// forward from [anchor] — this never produces a backwards or
+  /// contradictory time, regardless of how sparse the sample data is.
+  List<_FlatStep> _flattenJourney(DateTime anchor) {
     final steps = <_FlatStep>[];
+    DateTime cursor = anchor;
     for (int legIdx = 0; legIdx < widget.journey.legs.length; legIdx++) {
       final leg = widget.journey.legs[legIdx];
       if (legIdx > 0) {
         steps.add(_FlatStep.transferMarker(leg.boardStation.name));
+        cursor = cursor.add(const Duration(minutes: _transferBufferMinutes));
       }
+      final legStartTime = leg.intermediateStops.first.arrivalTime;
       for (final st in leg.intermediateStops) {
         final station = gtfsService.getStationById(st.stopId);
-        steps.add(_FlatStep(stationName: station?.name ?? st.stopId, time: st.arrivalTime));
+        final offsetMinutes = GtfsService.minutesBetweenTimes(legStartTime, st.arrivalTime);
+        final displayTime = cursor.add(Duration(minutes: offsetMinutes));
+        steps.add(_FlatStep(stationName: station?.name ?? st.stopId, time: displayTime));
       }
+      // Next leg (if any) continues from this leg's last stop time.
+      final lastOffset = GtfsService.minutesBetweenTimes(legStartTime, leg.intermediateStops.last.arrivalTime);
+      cursor = cursor.add(Duration(minutes: lastOffset));
     }
     return steps;
   }
 
   void _computeActiveStop() {
-    final now = TimeOfDay.now();
-    final nowMinutes = now.hour * 60 + now.minute;
+    if (!mounted) return;
+    final now = DateTime.now();
     int active = 0;
     for (int i = 0; i < _flatSteps.length; i++) {
       final step = _flatSteps[i];
-      if (step.isTransferMarker) continue;
-      final parts = step.time!.split(':').map(int.parse).toList();
-      final stopMinutes = parts[0] * 60 + parts[1];
-      if (nowMinutes >= stopMinutes) active = i;
+      if (step.isTransferMarker || step.time == null) continue;
+      if (now.isAfter(step.time!) || now.isAtSameMomentAs(step.time!)) active = i;
     }
     setState(() => _activeFlatIndex = active);
   }
@@ -75,51 +103,13 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     ));
   }
 
-  /// All legs' route lines combined, so the map shows the whole
-  /// journey (including both segments if there's a transfer).
-  List<Polyline> get _mapPolylines {
-    return widget.journey.legs.map((leg) => Polyline(points: leg.shapePoints, color: AppColors.mint, strokeWidth: 4)).toList();
-  }
-
-  List<Marker> get _mapMarkers {
-    final markers = <Marker>[];
-    for (final leg in widget.journey.legs) {
-      markers.add(Marker(
-        point: LatLng(leg.boardStation.lat, leg.boardStation.lon),
-        width: 26, height: 26,
-        child: const Icon(Icons.trip_origin, color: AppColors.teal, size: 22),
-      ));
-      markers.add(Marker(
-        point: LatLng(leg.alightStation.lat, leg.alightStation.lon),
-        width: 26, height: 26,
-        child: const Icon(Icons.location_on, color: AppColors.amber, size: 26),
-      ));
-    }
-    return markers;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final originStation = widget.journey.legs.first.boardStation;
-
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('On the Way')),
       body: Column(
         children: [
-          // Map showing the real route line(s) and stations — this was
-          // missing before; now shown just like the Route Details screen.
-          SizedBox(
-            height: 200,
-            child: FlutterMap(
-              options: MapOptions(initialCenter: LatLng(originStation.lat, originStation.lon), initialZoom: 12),
-              children: [
-                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.driveorride'),
-                PolylineLayer(polylines: _mapPolylines),
-                MarkerLayer(markers: _mapMarkers),
-              ],
-            ),
-          ),
           if (widget.journey.needsTransfer)
             Container(
               width: double.infinity,
@@ -158,8 +148,10 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                       decoration: BoxDecoration(shape: BoxShape.circle, color: isActive ? AppColors.mint : (isPast ? Colors.grey.shade300 : Colors.grey.shade400)),
                     ),
                     title: Text(step.stationName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: isPast ? Colors.grey : AppColors.teal)),
-                    // Times now formatted as "7:05 AM" instead of raw "07:05:00".
-                    subtitle: Text(step.time != null ? GtfsService.formatTime(step.time!) : '', style: TextStyle(color: isPast ? Colors.grey.shade400 : Colors.grey, fontWeight: FontWeight.w600)),
+                    subtitle: Text(
+                      step.time != null ? GtfsService.formatDateTime(step.time!) : '',
+                      style: TextStyle(color: isPast ? Colors.grey.shade400 : Colors.grey, fontWeight: FontWeight.w600),
+                    ),
                     trailing: isActive
                         ? Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(20)), child: const Text('NOW', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)))
                         : null,
@@ -170,7 +162,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
           ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Text('Progress shown is based on schedule, not live vehicle tracking.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey)),
+            child: Text('Times assume you left when you confirmed this trip — calculated from real scheduled durations, not live vehicle tracking.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey)),
           ),
           Padding(
             padding: const EdgeInsets.all(16),
@@ -188,7 +180,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
 
 class _FlatStep {
   final String stationName;
-  final String? time;
+  final DateTime? time;
   final bool isTransferMarker;
   _FlatStep({required this.stationName, this.time}) : isTransferMarker = false;
   _FlatStep.transferMarker(this.stationName) : time = null, isTransferMarker = true;

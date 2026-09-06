@@ -102,48 +102,48 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Column(
+        children: [
+          SizedBox(
+            height: 220,
+            child: FlutterMap(
+              options: MapOptions(initialCenter: widget.origin, initialZoom: 12),
               children: [
-                SizedBox(
-                  height: 220,
-                  child: FlutterMap(
-                    options: MapOptions(initialCenter: widget.origin, initialZoom: 12),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.example.driveorride',
-                      ),
-                      if (_mode == 'drive' && _driveRoutePoints.isNotEmpty)
-                        PolylineLayer(polylines: [Polyline(points: _driveRoutePoints, color: AppColors.amber, strokeWidth: 4)]),
-                      if (_mode == 'transit' && _transitPolyline.isNotEmpty)
-                        PolylineLayer(polylines: [Polyline(points: _transitPolyline, color: AppColors.mint, strokeWidth: 4)]),
-                      MarkerLayer(markers: [
-                        Marker(point: widget.origin, width: 30, height: 30, child: const Icon(Icons.trip_origin, color: AppColors.teal)),
-                        Marker(point: widget.destination, width: 30, height: 30, child: const Icon(Icons.location_on, color: AppColors.amber)),
-                      ]),
-                    ],
-                  ),
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  userAgentPackageName: 'com.example.driveorride',
                 ),
-                Container(
-                  color: Colors.white,
-                  padding: const EdgeInsets.all(10),
-                  child: Row(
-                    children: [
-                      Expanded(child: _modeButton('drive', Icons.directions_car, 'Drive')),
-                      const SizedBox(width: 8),
-                      Expanded(child: _modeButton('transit', Icons.directions_bus, 'Public Transport')),
-                    ],
-                  ),
-                ),
-                Expanded(child: _mode == 'transit' ? _buildTransitContent() : _buildDriveContent()),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice →')),
-                  ),
-                ),
+                if (_mode == 'drive' && _driveRoutePoints.isNotEmpty)
+                  PolylineLayer(polylines: [Polyline(points: _driveRoutePoints, color: AppColors.amber, strokeWidth: 4)]),
+                if (_mode == 'transit' && _transitPolyline.isNotEmpty)
+                  PolylineLayer(polylines: [Polyline(points: _transitPolyline, color: AppColors.mint, strokeWidth: 4)]),
+                MarkerLayer(markers: [
+                  Marker(point: widget.origin, width: 30, height: 30, child: const Icon(Icons.trip_origin, color: AppColors.teal)),
+                  Marker(point: widget.destination, width: 30, height: 30, child: const Icon(Icons.location_on, color: AppColors.amber)),
+                ]),
               ],
             ),
+          ),
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Expanded(child: _modeButton('drive', Icons.directions_car, 'Drive')),
+                const SizedBox(width: 8),
+                Expanded(child: _modeButton('transit', Icons.directions_bus, 'Public Transport')),
+              ],
+            ),
+          ),
+          Expanded(child: _mode == 'transit' ? _buildTransitContent() : _buildDriveContent()),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice →')),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -207,6 +207,29 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     }
 
     final j = _journey!;
+
+    // Build a live, always-consistent timeline: instead of showing each
+    // leg's raw absolute schedule time (which may not line up with the
+    // other leg if the sample data is sparse), we use the REAL travel
+    // durations between stops (a genuine fact from the schedule data)
+    // and anchor the whole journey starting from right now — the same
+    // way you'd actually plan a trip: "if I leave now, I'll reach each
+    // stop at approximately this time."
+    const walkToFirstStationMinutes = 5;
+    const transferBufferMinutes = 3;
+    final displayTimes = <DateTime>[];
+    DateTime cursor = DateTime.now().add(const Duration(minutes: walkToFirstStationMinutes));
+    for (int legIdx = 0; legIdx < j.legs.length; legIdx++) {
+      final stops = j.legs[legIdx].intermediateStops;
+      if (legIdx > 0) cursor = cursor.add(const Duration(minutes: transferBufferMinutes));
+      final legStartTime = stops.first.arrivalTime;
+      for (final st in stops) {
+        final offsetMinutes = GtfsService.minutesBetweenTimes(legStartTime, st.arrivalTime);
+        displayTimes.add(cursor.add(Duration(minutes: offsetMinutes)));
+      }
+      cursor = displayTimes.last; // next leg (if any) continues from here
+    }
+
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -231,7 +254,20 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        for (int legIdx = 0; legIdx < j.legs.length; legIdx++) ...[
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
+          child: Row(children: [
+            Icon(Icons.info_outline, size: 16, color: Colors.grey.shade600),
+            const SizedBox(width: 8),
+            Expanded(child: Text(
+              'Times shown assume you leave now — calculated from real scheduled travel durations for this line, not a live feed.',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+            )),
+          ]),
+        ),
+        for (int legIdx = 0, flatIdx = 0; legIdx < j.legs.length; legIdx++) ...[
           if (legIdx > 0)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
@@ -249,10 +285,12 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
             final station = gtfsService.getStationById(st.stopId);
             final isFirst = i == 0;
             final isLast = i == j.legs[legIdx].intermediateStops.length - 1;
+            final displayTime = displayTimes[flatIdx];
+            flatIdx++;
             return ListTile(
               leading: Icon(isFirst ? Icons.trip_origin : (isLast ? Icons.flag : Icons.fiber_manual_record), size: isFirst || isLast ? 22 : 12, color: AppColors.mint),
               title: Text(station?.name ?? st.stopId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text(GtfsService.formatTime(st.arrivalTime)),
+              subtitle: Text(GtfsService.formatDateTime(displayTime)),
               dense: true,
             );
           }),

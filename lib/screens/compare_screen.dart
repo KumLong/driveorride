@@ -5,6 +5,7 @@ import '../services/fuel_price_service.dart';
 import '../main.dart' show gtfsService;
 import '../theme.dart';
 import 'route_details_screen.dart';
+import 'trip_history_screen.dart';
 
 class CompareScreen extends StatefulWidget {
   final LatLng origin;
@@ -73,7 +74,7 @@ class _CompareScreenState extends State<CompareScreen> {
       backgroundColor: AppColors.bg,
       appBar: AppBar(
         title: const Text('Compare Results'),
-        actions: [IconButton(icon: const Icon(Icons.history), onPressed: () {})],
+        actions: [IconButton(icon: const Icon(Icons.history), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())))],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
