@@ -83,6 +83,29 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
       print('Supabase sync failed: $e');
     }
 
+    // NEW: apply this trip's real savings toward the user's active
+    // savings goal, so the progress bar on Savings Goals actually
+    // moves — this connection didn't exist before, which is why goals
+    // never increased regardless of how much was saved on real trips.
+    if (widget.savedVsAlternative > 0) {
+      try {
+        final goals = await _db.getGoals();
+        if (goals.isNotEmpty) {
+          final activeGoal = goals.first; // matches Home screen's "active goal" logic
+          final updatedGoal = SavingsGoalModel(
+            id: activeGoal.id,
+            name: activeGoal.name,
+            targetAmount: activeGoal.targetAmount,
+            savedAmount: activeGoal.savedAmount + widget.savedVsAlternative,
+          );
+          await _db.updateGoal(updatedGoal);
+        }
+      } catch (e) {
+        // ignore: avoid_print
+        print('Updating savings goal failed (trip was still logged fine): $e');
+      }
+    }
+
     if (mounted) {
       Navigator.pushReplacement(context, MaterialPageRoute(
         builder: (_) => TripAddedScreen(route: widget.route, savedVsAlternative: widget.savedVsAlternative),

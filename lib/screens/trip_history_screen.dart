@@ -322,7 +322,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 )),
         ],
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _showAddTripForm, child: const Icon(Icons.add)),
     );
   }
 

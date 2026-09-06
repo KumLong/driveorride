@@ -93,6 +93,15 @@ class _HomeScreenState extends State<HomeScreen> {
     _onCompareNow();
   }
 
+  // NEW: swaps the From and To text fields instantly.
+  void _swapFromTo() {
+    setState(() {
+      final temp = _fromCtrl.text;
+      _fromCtrl.text = _toCtrl.text;
+      _toCtrl.text = temp;
+    });
+  }
+
   Widget _fieldRow({required IconData icon, required Color iconBg, required Color iconColor, required String label, required TextEditingController ctrl, String? hint}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -200,6 +209,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             const SizedBox(width: 18),
                             Container(width: 1.5, height: 18, color: Colors.grey.shade200),
                             Expanded(child: Container(height: 1, color: Colors.grey.shade100, margin: const EdgeInsets.only(left: 18))),
+                            // NEW: swap button — instantly exchanges From and To.
+                            GestureDetector(
+                              onTap: _swapFromTo,
+                              child: Container(
+                                width: 32, height: 32,
+                                margin: const EdgeInsets.only(left: 8),
+                                decoration: BoxDecoration(color: AppColors.mintLight, shape: BoxShape.circle),
+                                child: const Icon(Icons.swap_vert, size: 18, color: AppColors.mint),
+                              ),
+                            ),
                           ]),
                         ),
                         _fieldRow(icon: Icons.location_on_outlined, iconBg: AppColors.amberLight, iconColor: AppColors.amber, label: 'TO', ctrl: _toCtrl, hint: 'Search destination...'),
@@ -216,8 +235,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // NEW: quick-access chips for saved locations — tap to
-                  // instantly fill destination and start comparing.
                   if (_savedLocations.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     const Text('Quick Destinations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.teal)),
@@ -262,7 +279,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  // NEW: active savings goal preview, tappable to manage goals.
                   if (_activeGoal != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
@@ -328,36 +344,36 @@ class _HomeScreenState extends State<HomeScreen> {
                     )
                   else
                     ..._recentTrips.map((trip) => GestureDetector(
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())).then((_) => _refreshRealData()),
-                          child: Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)]),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 34, height: 34,
-                                  decoration: BoxDecoration(color: trip.mode == 'transit' ? AppColors.mintLight : AppColors.amberLight, borderRadius: BorderRadius.circular(10)),
-                                  child: Icon(trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car, size: 16, color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(trip.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
-                                      Text(trip.createdOn.substring(0, 10), style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                                    ],
-                                  ),
-                                ),
-                                if (trip.savedVsAlternative > 0)
-                                  Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.mint)),
-                                const SizedBox(width: 4),
-                                Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
-                              ],
+                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())).then((_) => _refreshRealData()),
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)]),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 34, height: 34,
+                              decoration: BoxDecoration(color: trip.mode == 'transit' ? AppColors.mintLight : AppColors.amberLight, borderRadius: BorderRadius.circular(10)),
+                              child: Icon(trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car, size: 16, color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber),
                             ),
-                          ),
-                        )),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(trip.route, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis),
+                                  Text(trip.createdOn.substring(0, 10), style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                ],
+                              ),
+                            ),
+                            if (trip.savedVsAlternative > 0)
+                              Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.mint)),
+                            const SizedBox(width: 4),
+                            Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
+                          ],
+                        ),
+                      ),
+                    )),
                 ],
               ),
             ),

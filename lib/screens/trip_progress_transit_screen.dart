@@ -35,10 +35,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
   @override
   void initState() {
     super.initState();
-    // Anchor is computed ONCE, right when the trip starts — this fixes
-    // the plan in place, the same way a real commute's plan doesn't
-    // change once you've set off. What DOES change, as real time
-    // passes, is which point in this fixed plan counts as "now".
     _flatSteps = _flattenJourney(DateTime.now().add(const Duration(minutes: _walkToFirstStationMinutes)));
     _computeActiveStop();
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _computeActiveStop());
@@ -50,10 +46,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     super.dispose();
   }
 
-  /// Builds the flat, live-anchored timeline using real travel
-  /// durations from the GTFS data (always trustworthy), stacked
-  /// forward from [anchor] — this never produces a backwards or
-  /// contradictory time, regardless of how sparse the sample data is.
   List<_FlatStep> _flattenJourney(DateTime anchor) {
     final steps = <_FlatStep>[];
     DateTime cursor = anchor;
@@ -70,7 +62,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
         final displayTime = cursor.add(Duration(minutes: offsetMinutes));
         steps.add(_FlatStep(stationName: station?.name ?? st.stopId, time: displayTime));
       }
-      // Next leg (if any) continues from this leg's last stop time.
       final lastOffset = GtfsService.minutesBetweenTimes(legStartTime, leg.intermediateStops.last.arrivalTime);
       cursor = cursor.add(Duration(minutes: lastOffset));
     }
@@ -103,13 +94,50 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     ));
   }
 
+  // Real route line(s) — combines every leg's shape, same as Route Details.
+  List<Polyline> get _mapPolylines {
+    return widget.journey.legs.map((leg) => Polyline(points: leg.shapePoints, color: AppColors.mint, strokeWidth: 4)).toList();
+  }
+
+  List<Marker> get _mapMarkers {
+    final markers = <Marker>[];
+    for (final leg in widget.journey.legs) {
+      markers.add(Marker(
+        point: LatLng(leg.boardStation.lat, leg.boardStation.lon),
+        width: 26, height: 26,
+        child: const Icon(Icons.trip_origin, color: AppColors.teal, size: 22),
+      ));
+      markers.add(Marker(
+        point: LatLng(leg.alightStation.lat, leg.alightStation.lon),
+        width: 26, height: 26,
+        child: const Icon(Icons.location_on, color: AppColors.amber, size: 26),
+      ));
+    }
+    return markers;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final originStation = widget.journey.legs.first.boardStation;
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('On the Way')),
       body: Column(
         children: [
+          // Real map showing the route line + station markers — this
+          // was accidentally dropped in an earlier edit; restored here.
+          SizedBox(
+            height: 200,
+            child: FlutterMap(
+              options: MapOptions(initialCenter: LatLng(originStation.lat, originStation.lon), initialZoom: 12),
+              children: [
+                TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', userAgentPackageName: 'com.example.driveorride'),
+                PolylineLayer(polylines: _mapPolylines),
+                MarkerLayer(markers: _mapMarkers),
+              ],
+            ),
+          ),
           if (widget.journey.needsTransfer)
             Container(
               width: double.infinity,

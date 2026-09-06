@@ -94,6 +94,18 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     return _journey!.legs.expand((leg) => leg.shapePoints).toList();
   }
 
+  /// Real straight-line distance converted into an estimated walking
+  /// time, using an average walking pace of ~4.8 km/h (0.08 km/min) —
+  /// used for the "last mile" between the user's typed address and
+  /// the nearest real station, which the transit schedule itself
+  /// doesn't cover.
+  int _estimateWalkMinutes(LatLng a, LatLng b) {
+    final meters = Distance()(a, b);
+    final km = meters / 1000.0;
+    final minutes = (km / 0.08).ceil();
+    return minutes < 1 ? 1 : minutes;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -115,7 +127,16 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
                 if (_mode == 'drive' && _driveRoutePoints.isNotEmpty)
                   PolylineLayer(polylines: [Polyline(points: _driveRoutePoints, color: AppColors.amber, strokeWidth: 4)]),
                 if (_mode == 'transit' && _transitPolyline.isNotEmpty)
-                  PolylineLayer(polylines: [Polyline(points: _transitPolyline, color: AppColors.mint, strokeWidth: 4)]),
+                  PolylineLayer(polylines: [
+                    Polyline(points: _transitPolyline, color: AppColors.mint, strokeWidth: 4),
+                    // "Last mile" walking segments — dashed, and a
+                    // different colour, to distinguish real transit
+                    // track from an estimated straight-line walk.
+                    if (_originStation != null)
+                      Polyline(points: [widget.origin, LatLng(_originStation!.lat, _originStation!.lon)], color: Colors.grey.shade600, strokeWidth: 3, pattern: StrokePattern.dashed(segments: const [6, 6])),
+                    if (_destStation != null)
+                      Polyline(points: [LatLng(_destStation!.lat, _destStation!.lon), widget.destination], color: Colors.grey.shade600, strokeWidth: 3, pattern: StrokePattern.dashed(segments: const [6, 6])),
+                  ]),
                 MarkerLayer(markers: [
                   Marker(point: widget.origin, width: 30, height: 30, child: const Icon(Icons.trip_origin, color: AppColors.teal)),
                   Marker(point: widget.destination, width: 30, height: 30, child: const Icon(Icons.location_on, color: AppColors.amber)),
@@ -215,10 +236,10 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     // and anchor the whole journey starting from right now — the same
     // way you'd actually plan a trip: "if I leave now, I'll reach each
     // stop at approximately this time."
-    const walkToFirstStationMinutes = 5;
     const transferBufferMinutes = 3;
+    final walkToFirstStationMinutes = _estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon));
     final displayTimes = <DateTime>[];
-    DateTime cursor = DateTime.now().add(const Duration(minutes: walkToFirstStationMinutes));
+    DateTime cursor = DateTime.now().add(Duration(minutes: walkToFirstStationMinutes));
     for (int legIdx = 0; legIdx < j.legs.length; legIdx++) {
       final stops = j.legs[legIdx].intermediateStops;
       if (legIdx > 0) cursor = cursor.add(const Duration(minutes: transferBufferMinutes));
@@ -268,6 +289,13 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
           ]),
         ),
         for (int legIdx = 0, flatIdx = 0; legIdx < j.legs.length; legIdx++) ...[
+          if (legIdx == 0)
+            ListTile(
+              leading: const Icon(Icons.directions_walk, size: 20, color: Colors.grey),
+              title: Text('Walk to ${_originStation!.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: Text('~${_estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon))} min walk (estimated from distance)'),
+              dense: true,
+            ),
           if (legIdx > 0)
             Container(
               margin: const EdgeInsets.symmetric(vertical: 8),
@@ -294,6 +322,13 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
               dense: true,
             );
           }),
+          if (legIdx == j.legs.length - 1)
+            ListTile(
+              leading: const Icon(Icons.directions_walk, size: 20, color: Colors.grey),
+              title: Text('Walk to ${widget.destinationName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              subtitle: Text('~${_estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination)} min walk (estimated from distance)'),
+              dense: true,
+            ),
         ],
         const SizedBox(height: 8),
         const Text('Fare is an estimate based on Prasarana\'s published distance-based fare bands — no public fare API exists, so this is not pulled from a live source.', style: TextStyle(fontSize: 11, color: Colors.grey)),

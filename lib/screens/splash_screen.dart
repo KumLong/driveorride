@@ -14,11 +14,7 @@ class SplashScreen extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 80, height: 80,
-              decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(24)),
-              child: const Icon(Icons.directions_transit, color: Colors.white, size: 40),
-            ),
+            Image.asset('assets/icon/logo.png', width: 100, height: 100),
             const SizedBox(height: 16),
             const Text('DriveOrRide', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
             const Text('Smarter choices. Better commute.', style: TextStyle(color: AppColors.mint, fontSize: 13)),
