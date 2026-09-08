@@ -5,7 +5,6 @@ import 'package:location/location.dart' as loc;
 import '../services/location_tracking_service.dart';
 import '../theme.dart';
 import 'trip_summary_screen.dart';
-import 'stop_trip_screen.dart';
 
 /// Live GPS tracking during a drive — matches Practical 13's location
 /// package pattern. Shows a moving "you are here" dot on the map.
@@ -66,7 +65,83 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
   }
 
   void _onStop() {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => const StopTripScreen()));
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.topRight,
+                child: GestureDetector(
+                  onTap: () => Navigator.pop(dialogContext),
+                  child: const Icon(Icons.close, color: Colors.grey, size: 20),
+                ),
+              ),
+              Container(
+                width: 64, height: 64,
+                decoration: BoxDecoration(color: AppColors.amberLight, shape: BoxShape.circle),
+                child: const Icon(Icons.warning_amber_rounded, color: AppColors.amber, size: 32),
+              ),
+              const SizedBox(height: 16),
+              const Text('Stop this trip?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.teal)),
+              const SizedBox(height: 8),
+              const Text(
+                'This trip won\'t be counted in your savings if you stop now.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.grey, fontSize: 13),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: AppColors.mintLight, borderRadius: BorderRadius.circular(14)),
+                child: Row(
+                  children: [
+                    const Icon(Icons.savings, color: AppColors.mint),
+                    const SizedBox(width: 10),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('This trip\'s savings', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        Text('RM ${widget.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.teal)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      onPressed: () {
+                        Navigator.pop(dialogContext);
+                        Navigator.popUntil(context, (route) => route.isFirst);
+                      },
+                      child: const Text('Stop Trip'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _onArrived() {

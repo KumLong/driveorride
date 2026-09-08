@@ -16,7 +16,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _fromCtrl = TextEditingController(text: 'Kuala Lumpur Sentral');
+  final _fromCtrl = TextEditingController();
   final _toCtrl = TextEditingController();
   final _routingService = RoutingService();
   final _db = DatabaseService();
@@ -58,7 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _onCompareNow() async {
-    if (_toCtrl.text.isEmpty) return;
+    if (_fromCtrl.text.isEmpty || _toCtrl.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter both a starting point and a destination.')),
+      );
+      return;
+    }
     setState(() => _loading = true);
 
     final origin = await _routingService.geocode(_fromCtrl.text);
@@ -202,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 16, offset: const Offset(0, 6))]),
                     child: Column(
                       children: [
-                        _fieldRow(icon: Icons.my_location, iconBg: AppColors.mintLight, iconColor: AppColors.mint, label: 'FROM', ctrl: _fromCtrl),
+                        _fieldRow(icon: Icons.my_location, iconBg: AppColors.mintLight, iconColor: AppColors.mint, label: 'FROM', ctrl: _fromCtrl, hint: 'Enter starting point...'),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           child: Row(children: [
