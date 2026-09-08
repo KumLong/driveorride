@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:location/location.dart';
 import '../services/routing_service.dart';
 import '../services/database_service.dart';
+import '../services/location_tracking_service.dart';
 import '../models/models.dart';
 import '../theme.dart';
 import 'compare_screen.dart';
@@ -20,7 +24,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final _toCtrl = TextEditingController();
   final _routingService = RoutingService();
   final _db = DatabaseService();
+  final _locationService = LocationTrackingService();
+
   bool _loading = false;
+  bool _locating = false;
 
   double _totalSaved = 0;
   List<TripLogModel> _recentTrips = [];
@@ -34,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _refreshRealData();
+    _detectMyLocation();
   }
 
   @override
@@ -54,6 +62,78 @@ class _HomeScreenState extends State<HomeScreen> {
         _savedLocations = locations;
         _activeGoal = goals.isNotEmpty ? goals.first : null;
       });
+    }
+  }
+
+  Future<void> _detectMyLocation() async {
+    setState(() => _locating = true);
+
+    final granted = await _locationService.isPermissionGranted();
+    if (!granted) {
+      await _locationService.requestLocationPermission();
+      final grantedNow = await _locationService.isPermissionGranted();
+      if (!grantedNow) {
+        setState(() => _locating = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Location permission denied. Please enable it in settings.'),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    final gpsOn = await _locationService.requestEnableGps();
+    if (!gpsOn) {
+      setState(() => _locating = false);
+      return;
+    }
+
+    try {
+      final loc = Location();
+      final data = await loc.getLocation();
+      final lat = data.latitude;
+      final lng = data.longitude;
+
+      if (lat == null || lng == null) {
+        setState(() => _locating = false);
+        return;
+      }
+
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse'
+            '?lat=$lat&lon=$lng&format=json',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'DriveOrRideApp/1.0 (student project)'},
+      );
+
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        final address = body['address'];
+        final shortName = body['name'] ??
+            address?['road'] ??
+            address?['suburb'] ??
+            address?['city'] ??
+            body['display_name'] ??
+            '$lat, $lng';
+        if (mounted) {
+          setState(() => _fromCtrl.text = shortName);
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not detect location. Please try again.')),
+        );
+      }
+    }
+
+    if (mounted) {
+      setState(() => _locating = false);
     }
   }
 
@@ -91,14 +171,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Tapping a saved location fills the destination and immediately
-  // triggers the comparison — a real shortcut, not just decoration.
   void _useSavedLocation(SavedLocationModel loc) {
     _toCtrl.text = loc.address;
     _onCompareNow();
   }
 
-  // NEW: swaps the From and To text fields instantly.
   void _swapFromTo() {
     setState(() {
       final temp = _fromCtrl.text;
@@ -107,20 +184,51 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Widget _fieldRow({required IconData icon, required Color iconBg, required Color iconColor, required String label, required TextEditingController ctrl, String? hint}) {
+  Widget _fieldRow({
+    required IconData icon,
+    required Color iconBg,
+    required Color iconColor,
+    required String label,
+    required TextEditingController ctrl,
+    String? hint,
+    VoidCallback? onIconTap,
+    bool iconLoading = false,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(width: 36, height: 36, decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)), child: Icon(icon, size: 18, color: iconColor)),
+        GestureDetector(
+          onTap: onIconTap,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+            child: iconLoading
+                ? Padding(
+              padding: const EdgeInsets.all(8),
+              child: CircularProgressIndicator(strokeWidth: 2, color: iconColor),
+            )
+                : Icon(icon, size: 18, color: iconColor),
+          ),
+        ),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
+              Text(
+                label,
+                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5),
+              ),
               TextField(
                 controller: ctrl,
-                decoration: InputDecoration(hintText: hint, border: InputBorder.none, isDense: true, contentPadding: EdgeInsets.zero, filled: false),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.zero,
+                  filled: false,
+                ),
                 style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.teal),
               ),
             ],
@@ -141,7 +249,13 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Container(
               height: _headerHeight,
               width: double.infinity,
-              decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppColors.teal, Color(0xFF025D6A)], begin: Alignment.topLeft, end: Alignment.bottomRight)),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.teal, Color(0xFF025D6A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
               child: Stack(
                 children: [
                   Positioned(
@@ -173,17 +287,29 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Good morning! \u{1F44B}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
+                                Text(
+                                  'Good morning! \u{1F44B}',
+                                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
+                                ),
                                 SizedBox(height: 4),
-                                Text('Where will your journey take you today?', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                                Text(
+                                  'Where will your journey take you today?',
+                                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                                ),
                               ],
                             ),
                           ),
                           GestureDetector(
-                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedLocationsScreen())).then((_) => _refreshRealData()),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const SavedLocationsScreen()),
+                            ).then((_) => _refreshRealData()),
                             child: Container(
                               width: 38, height: 38,
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
                               child: const Icon(Icons.location_on_outlined, color: Colors.white, size: 20),
                             ),
                           ),
@@ -204,35 +330,66 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 16, offset: const Offset(0, 6))]),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.10), blurRadius: 16, offset: const Offset(0, 6))],
+                    ),
                     child: Column(
                       children: [
-                        _fieldRow(icon: Icons.my_location, iconBg: AppColors.mintLight, iconColor: AppColors.mint, label: 'FROM', ctrl: _fromCtrl, hint: 'Enter starting point...'),
+                        // FROM field — tap the left icon to re-detect location
+                        _fieldRow(
+                          icon: Icons.my_location,
+                          iconBg: AppColors.mintLight,
+                          iconColor: AppColors.mint,
+                          label: 'FROM',
+                          ctrl: _fromCtrl,
+                          hint: 'Enter starting point...',
+                          onIconTap: _locating ? null : _detectMyLocation,
+                          iconLoading: _locating,
+                        ),
+
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Row(children: [
-                            const SizedBox(width: 18),
-                            Container(width: 1.5, height: 18, color: Colors.grey.shade200),
-                            Expanded(child: Container(height: 1, color: Colors.grey.shade100, margin: const EdgeInsets.only(left: 18))),
-                            // NEW: swap button — instantly exchanges From and To.
-                            GestureDetector(
-                              onTap: _swapFromTo,
-                              child: Container(
-                                width: 32, height: 32,
-                                margin: const EdgeInsets.only(left: 8),
-                                decoration: BoxDecoration(color: AppColors.mintLight, shape: BoxShape.circle),
-                                child: const Icon(Icons.swap_vert, size: 18, color: AppColors.mint),
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 18),
+                              Container(width: 1.5, height: 18, color: Colors.grey.shade200),
+                              Expanded(child: Container(height: 1, color: Colors.grey.shade100, margin: const EdgeInsets.only(left: 18))),
+                              GestureDetector(
+                                onTap: _swapFromTo,
+                                child: Container(
+                                  width: 32, height: 32,
+                                  margin: const EdgeInsets.only(left: 8),
+                                  decoration: BoxDecoration(color: AppColors.mintLight, shape: BoxShape.circle),
+                                  child: const Icon(Icons.swap_vert, size: 18, color: AppColors.mint),
+                                ),
                               ),
-                            ),
-                          ]),
+                            ],
+                          ),
                         ),
-                        _fieldRow(icon: Icons.location_on_outlined, iconBg: AppColors.amberLight, iconColor: AppColors.amber, label: 'TO', ctrl: _toCtrl, hint: 'Search destination...'),
+
+                        // TO field — unchanged
+                        _fieldRow(
+                          icon: Icons.location_on_outlined,
+                          iconBg: AppColors.amberLight,
+                          iconColor: AppColors.amber,
+                          label: 'TO',
+                          ctrl: _toCtrl,
+                          hint: 'Search destination...',
+                        ),
+
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton.icon(
                             onPressed: _loading ? null : _onCompareNow,
-                            icon: _loading ? const SizedBox(height: 16, width: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.bar_chart, size: 18),
+                            icon: _loading
+                                ? const SizedBox(
+                              height: 16, width: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                                : const Icon(Icons.bar_chart, size: 18),
                             label: Text(_loading ? 'Searching...' : 'Compare Now'),
                           ),
                         ),
@@ -266,10 +423,21 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(gradient: LinearGradient(colors: [AppColors.mintLight, Colors.teal.shade50], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(18)),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.mintLight, Colors.teal.shade50],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
                     child: Row(
                       children: [
-                        Container(width: 44, height: 44, decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.account_balance_wallet, color: Colors.white)),
+                        Container(
+                          width: 44, height: 44,
+                          decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.account_balance_wallet, color: Colors.white),
+                        ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,10 +455,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (_activeGoal != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavingsGoalsScreen())).then((_) => _refreshRealData()),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SavingsGoalsScreen()),
+                      ).then((_) => _refreshRealData()),
                       child: Container(
                         padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)],
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -298,14 +473,27 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 const Icon(Icons.track_changes, color: AppColors.amber, size: 18),
                                 const SizedBox(width: 8),
-                                Expanded(child: Text(_activeGoal!.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.teal))),
-                                Text('${_activeGoal!.progressPercent.toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.mint)),
+                                Expanded(
+                                  child: Text(
+                                    _activeGoal!.name,
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.teal),
+                                  ),
+                                ),
+                                Text(
+                                  '${_activeGoal!.progressPercent.toStringAsFixed(0)}%',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.mint),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(6),
-                              child: LinearProgressIndicator(value: _activeGoal!.progressPercent / 100, backgroundColor: Colors.grey.shade200, color: AppColors.mint, minHeight: 6),
+                              child: LinearProgressIndicator(
+                                value: _activeGoal!.progressPercent / 100,
+                                backgroundColor: Colors.grey.shade200,
+                                color: AppColors.mint,
+                                minHeight: 6,
+                              ),
                             ),
                           ],
                         ),
@@ -319,11 +507,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Text('Recent Trips', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.teal)),
                       TextButton(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())).then((_) => _refreshRealData()),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
+                        ).then((_) => _refreshRealData()),
                         child: const Text('See all', style: TextStyle(fontSize: 12, color: AppColors.mint)),
                       ),
                     ],
                   ),
+
                   if (_recentTrips.isEmpty)
                     Container(
                       width: double.infinity,
@@ -349,17 +541,31 @@ class _HomeScreenState extends State<HomeScreen> {
                     )
                   else
                     ..._recentTrips.map((trip) => GestureDetector(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())).then((_) => _refreshRealData()),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
+                      ).then((_) => _refreshRealData()),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)]),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
+                        ),
                         child: Row(
                           children: [
                             Container(
                               width: 34, height: 34,
-                              decoration: BoxDecoration(color: trip.mode == 'transit' ? AppColors.mintLight : AppColors.amberLight, borderRadius: BorderRadius.circular(10)),
-                              child: Icon(trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car, size: 16, color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber),
+                              decoration: BoxDecoration(
+                                color: trip.mode == 'transit' ? AppColors.mintLight : AppColors.amberLight,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car,
+                                size: 16,
+                                color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber,
+                              ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
@@ -372,7 +578,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             if (trip.savedVsAlternative > 0)
-                              Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.mint)),
+                              Text(
+                                '+RM ${trip.savedVsAlternative.toStringAsFixed(2)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.mint),
+                              ),
                             const SizedBox(width: 4),
                             Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
                           ],
