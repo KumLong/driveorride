@@ -29,31 +29,19 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   List<LatLng> _driveRoutePoints = [];
   double _driveDistanceKm = 0;
   double _driveDurationMin = 0;
-  double _driveCost = 0; // REAL: (fuel price × distance) + toll estimate
+  double _driveCost = 0;
   double _fuelCost = 0;
   double _tollCost = 0;
+  List<String> _driveSteps = []; // real turn-by-turn from OSRM
 
   Station? _originStation;
   Station? _destStation;
   MultiLegJourney? _journey;
-  double _transitFareEstimate = 0; // ESTIMATED: distance-based formula, no fare API exists
+  double _transitFareEstimate = 0;
 
-  static const _litresPerKm = 0.07; // assumed average sedan fuel consumption
-
-  /// Toll estimate: rate × distance, matching PLUS's own stated method
-  /// ("Toll Fare calculation is based on the current toll rate (cent/km)
-  /// and distance travelled" — confirmed from their official FAQ).
-  /// RM 0.12/km is a reasonable approximate average across common
-  /// Klang Valley expressways for a Class 1 (car) — not every route
-  /// actually uses a toll road, so this is a general estimate, not a
-  /// route-specific lookup of which exact highway is used.
+  static const _litresPerKm = 0.07;
   static const _tollRatePerKm = 0.12;
 
-  /// Distance-based fare estimate, modelled on Prasarana's published
-  /// fare bands (roughly RM1.20 for the shortest trips, scaling up to
-  /// a capped maximum around RM6.40 for the longest single trips).
-  /// This is an ESTIMATE, not a real fare lookup — no public fare API
-  /// exists, as established earlier.
   double _estimateFare(double distanceKm) {
     const baseFare = 1.20;
     const ratePerKm = 0.18;
@@ -81,9 +69,10 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
       _driveRoutePoints = route?.routePoints ?? [];
       _driveDistanceKm = route?.distanceKm ?? 0;
       _driveDurationMin = route?.durationMinutes ?? 0;
+      _driveSteps = route?.steps ?? [];
       _fuelCost = _driveDistanceKm * _litresPerKm * fuelPrice;
       _tollCost = _driveDistanceKm * _tollRatePerKm;
-      _driveCost = _fuelCost + _tollCost; // REAL combined calculation
+      _driveCost = _fuelCost + _tollCost;
       _transitFareEstimate = _journey != null ? _estimateFare(_journey!.totalDistanceKm) : 0;
       _loading = false;
     });
@@ -94,16 +83,32 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     return _journey!.legs.expand((leg) => leg.shapePoints).toList();
   }
 
-  /// Real straight-line distance converted into an estimated walking
-  /// time, using an average walking pace of ~4.8 km/h (0.08 km/min) —
-  /// used for the "last mile" between the user's typed address and
-  /// the nearest real station, which the transit schedule itself
-  /// doesn't cover.
   int _estimateWalkMinutes(LatLng a, LatLng b) {
     final meters = Distance()(a, b);
     final km = meters / 1000.0;
     final minutes = (km / 0.08).ceil();
     return minutes < 1 ? 1 : minutes;
+  }
+
+  bool _canConfirm() {
+    return _driveRoutePoints.isNotEmpty || _journey != null;
+  }
+
+  void _onConfirm() {
+    Navigator.push(context, MaterialPageRoute(
+      builder: (_) => ConfirmChoiceScreen(
+        destination: widget.destination,
+        originName: widget.originName,
+        destinationName: widget.destinationName,
+        driveRoutePoints: _driveRoutePoints,
+        driveDistanceKm: _driveDistanceKm,
+        driveDurationMin: _driveDurationMin,
+        driveCost: _driveCost,
+        driveSteps: _driveSteps,
+        journey: _journey,
+        transitFare: _transitFareEstimate,
+      ),
+    ));
   }
 
   @override
@@ -115,8 +120,27 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
         children: [
+          // ── From/To header card ──
+          Container(
+            width: double.infinity,
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            child: Row(
+              children: [
+                const Icon(Icons.circle, size: 10, color: AppColors.teal),
+                const SizedBox(width: 8),
+                Expanded(child: Text(widget.originName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                Icon(Icons.arrow_forward, size: 14, color: Colors.grey.shade400),
+                const SizedBox(width: 8),
+                const Icon(Icons.location_on, size: 14, color: AppColors.amber),
+                const SizedBox(width: 4),
+                Expanded(child: Text(widget.destinationName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+          ),
+          // ── Map ──
           SizedBox(
-            height: 220,
+            height: 200,
             child: FlutterMap(
               options: MapOptions(initialCenter: widget.origin, initialZoom: 12),
               children: [
@@ -129,9 +153,6 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
                 if (_mode == 'transit' && _transitPolyline.isNotEmpty)
                   PolylineLayer(polylines: [
                     Polyline(points: _transitPolyline, color: AppColors.mint, strokeWidth: 4),
-                    // "Last mile" walking segments — dashed, and a
-                    // different colour, to distinguish real transit
-                    // track from an estimated straight-line walk.
                     if (_originStation != null)
                       Polyline(points: [widget.origin, LatLng(_originStation!.lat, _originStation!.lon)], color: Colors.grey.shade600, strokeWidth: 3, pattern: StrokePattern.dashed(segments: const [6, 6])),
                     if (_destStation != null)
@@ -144,9 +165,10 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
               ],
             ),
           ),
+          // ── Mode toggle ──
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
             child: Row(
               children: [
                 Expanded(child: _modeButton('drive', Icons.directions_car, 'Drive')),
@@ -168,26 +190,6 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     );
   }
 
-  bool _canConfirm() {
-    return _driveRoutePoints.isNotEmpty || _journey != null;
-  }
-
-  void _onConfirm() {
-    Navigator.push(context, MaterialPageRoute(
-      builder: (_) => ConfirmChoiceScreen(
-        destination: widget.destination,
-        originName: widget.originName,
-        destinationName: widget.destinationName,
-        driveRoutePoints: _driveRoutePoints,
-        driveDistanceKm: _driveDistanceKm,
-        driveDurationMin: _driveDurationMin,
-        driveCost: _driveCost,
-        journey: _journey,
-        transitFare: _transitFareEstimate,
-      ),
-    ));
-  }
-
   Widget _modeButton(String value, IconData icon, String label) {
     final selected = _mode == value;
     return GestureDetector(
@@ -200,6 +202,117 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
           Text(label, style: TextStyle(color: selected ? Colors.white : Colors.grey, fontSize: 11, fontWeight: FontWeight.bold)),
         ]),
       ),
+    );
+  }
+
+  /// One unified stat row style shared by Drive and Transit — a single
+  /// white card with 2-3 values separated by thin vertical dividers,
+  /// matching the cleaner reference layout instead of separate boxes.
+  Widget _statsRow(List<(String, String)> items) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: List.generate(items.length * 2 - 1, (i) {
+          if (i.isOdd) {
+            return Container(width: 1, height: 32, color: Colors.grey.shade200, margin: const EdgeInsets.symmetric(horizontal: 4));
+          }
+          final (label, value) = items[i ~/ 2];
+          return Expanded(
+            child: Column(
+              children: [
+                Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.teal)),
+                const SizedBox(height: 2),
+                Text(label, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  /// One row of the "Route details" step list — matching the reference's
+  /// vertical timeline style with colored dot icons.
+  Widget _stepTile({required bool isFirst, required bool isLast, required String title, String? subtitle}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Icon(
+              isFirst ? Icons.trip_origin : (isLast ? Icons.flag : Icons.fiber_manual_record),
+              size: isFirst || isLast ? 18 : 10,
+              color: AppColors.mint,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.teal)),
+                if (subtitle != null) Text(subtitle, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDriveContent() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _statsRow([
+          ('Travel time', '${_driveDurationMin.toStringAsFixed(0)} min'),
+          ('Distance', '${_driveDistanceKm.toStringAsFixed(1)} km'),
+          ('Est. cost', 'RM ${_driveCost.toStringAsFixed(2)}'),
+        ]),
+        const SizedBox(height: 20),
+        const Text('Route details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.teal)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          child: _driveSteps.isEmpty
+              ? Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: _stepTile(isFirst: true, isLast: true, title: '${widget.originName} → ${widget.destinationName}', subtitle: 'Turn-by-turn steps unavailable for this route'),
+          )
+              : Column(
+            children: List.generate(_driveSteps.length, (i) => _stepTile(
+              isFirst: i == 0,
+              isLast: i == _driveSteps.length - 1,
+              title: _driveSteps[i],
+            )),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+          child: Row(
+            children: [
+              Expanded(child: Row(children: [const Icon(Icons.local_gas_station, size: 16, color: AppColors.amber), const SizedBox(width: 6), Text('Fuel: RM ${_fuelCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))])),
+              Expanded(child: Row(children: [const Icon(Icons.toll, size: 16, color: AppColors.amber), const SizedBox(width: 6), Text('Toll: RM ${_tollCost.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600))])),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Turn-by-turn directions are real, from OSRM\'s routing data. Fuel is calculated live; toll is a general rate-based estimate, not route-specific.',
+          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -229,13 +342,6 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
 
     final j = _journey!;
 
-    // Build a live, always-consistent timeline: instead of showing each
-    // leg's raw absolute schedule time (which may not line up with the
-    // other leg if the sample data is sparse), we use the REAL travel
-    // durations between stops (a genuine fact from the schedule data)
-    // and anchor the whole journey starting from right now — the same
-    // way you'd actually plan a trip: "if I leave now, I'll reach each
-    // stop at approximately this time."
     const transferBufferMinutes = 3;
     final walkToFirstStationMinutes = _estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon));
     final displayTimes = <DateTime>[];
@@ -248,145 +354,76 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
         final offsetMinutes = GtfsService.minutesBetweenTimes(legStartTime, st.arrivalTime);
         displayTimes.add(cursor.add(Duration(minutes: offsetMinutes)));
       }
-      cursor = displayTimes.last; // next leg (if any) continues from here
+      cursor = displayTimes.last;
     }
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        _statsRow([
+          ('Travel time', '${j.totalDurationMinutes} min'),
+          ('Est. fare', 'RM ${_transitFareEstimate.toStringAsFixed(2)}'),
+          ('Transfers', j.needsTransfer ? '1' : '0'),
+        ]),
+        const SizedBox(height: 12),
+        if (j.needsTransfer)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: AppColors.amberLight, borderRadius: BorderRadius.circular(10)),
+            child: Row(children: [
+              const Icon(Icons.sync_alt, color: AppColors.amber, size: 16),
+              const SizedBox(width: 8),
+              Expanded(child: Text('Transfer at ${j.transferStation!.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+            ]),
+          ),
+        const SizedBox(height: 4),
+        const Text('Route details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.teal)),
+        const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: AppColors.mintLight, borderRadius: BorderRadius.circular(14)),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+          child: Column(
             children: [
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Total time', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                Text('${j.totalDurationMinutes} min', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.teal)),
-              ])),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Est. fare', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                Text('RM ${_transitFareEstimate.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.teal)),
-              ])),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Transfers', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                Text(j.needsTransfer ? '1' : 'None', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.teal)),
-              ])),
+              for (int legIdx = 0, flatIdx = 0; legIdx < j.legs.length; legIdx++) ...[
+                if (legIdx == 0)
+                  _stepTile(isFirst: true, isLast: false, title: 'Walk to ${_originStation!.name}', subtitle: '~$walkToFirstStationMinutes min walk'),
+                if (legIdx > 0)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(children: [
+                      const SizedBox(width: 4),
+                      const Icon(Icons.sync_alt, size: 14, color: AppColors.amber),
+                      const SizedBox(width: 8),
+                      Text('Change at ${j.legs[legIdx - 1].alightStation.name}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.amber)),
+                    ]),
+                  ),
+                ...j.legs[legIdx].intermediateStops.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final st = entry.value;
+                  final station = gtfsService.getStationById(st.stopId);
+                  final displayTime = displayTimes[flatIdx];
+                  flatIdx++;
+                  return _stepTile(
+                    isFirst: false,
+                    isLast: false,
+                    title: station?.name ?? st.stopId,
+                    subtitle: GtfsService.formatDateTime(displayTime),
+                  );
+                }),
+                if (legIdx == j.legs.length - 1)
+                  _stepTile(isFirst: false, isLast: true, title: 'Walk to ${widget.destinationName}', subtitle: '~${_estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination)} min walk'),
+              ],
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(10)),
-          child: Row(children: [
-            Icon(Icons.info_outline, size: 16, color: Colors.grey.shade600),
-            const SizedBox(width: 8),
-            Expanded(child: Text(
-              'Times shown assume you leave now — calculated from real scheduled travel durations for this line, not a live feed.',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-            )),
-          ]),
-        ),
-        for (int legIdx = 0, flatIdx = 0; legIdx < j.legs.length; legIdx++) ...[
-          if (legIdx == 0)
-            ListTile(
-              leading: const Icon(Icons.directions_walk, size: 20, color: Colors.grey),
-              title: Text('Walk to ${_originStation!.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text('~${_estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon))} min walk (estimated from distance)'),
-              dense: true,
-            ),
-          if (legIdx > 0)
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(color: AppColors.amberLight, borderRadius: BorderRadius.circular(10)),
-              child: Row(children: [
-                const Icon(Icons.sync_alt, color: AppColors.amber, size: 18),
-                const SizedBox(width: 8),
-                Text('Transfer at ${j.legs[legIdx - 1].alightStation.name}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-              ]),
-            ),
-          ...j.legs[legIdx].intermediateStops.asMap().entries.map((entry) {
-            final i = entry.key;
-            final st = entry.value;
-            final station = gtfsService.getStationById(st.stopId);
-            final isFirst = i == 0;
-            final isLast = i == j.legs[legIdx].intermediateStops.length - 1;
-            final displayTime = displayTimes[flatIdx];
-            flatIdx++;
-            return ListTile(
-              leading: Icon(isFirst ? Icons.trip_origin : (isLast ? Icons.flag : Icons.fiber_manual_record), size: isFirst || isLast ? 22 : 12, color: AppColors.mint),
-              title: Text(station?.name ?? st.stopId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text(GtfsService.formatDateTime(displayTime)),
-              dense: true,
-            );
-          }),
-          if (legIdx == j.legs.length - 1)
-            ListTile(
-              leading: const Icon(Icons.directions_walk, size: 20, color: Colors.grey),
-              title: Text('Walk to ${widget.destinationName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              subtitle: Text('~${_estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination)} min walk (estimated from distance)'),
-              dense: true,
-            ),
-        ],
         const SizedBox(height: 8),
-        const Text('Fare is an estimate based on Prasarana\'s published distance-based fare bands — no public fare API exists, so this is not pulled from a live source.', style: TextStyle(fontSize: 11, color: Colors.grey)),
+        Text(
+          'Times assume you leave now, using real scheduled durations. Fare is an estimate — no public fare API exists.',
+          style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+          textAlign: TextAlign.center,
+        ),
       ],
-    );
-  }
-
-  Widget _buildDriveContent() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Row(children: [
-            Expanded(child: _statBox(Icons.route, 'Distance', '${_driveDistanceKm.toStringAsFixed(1)} km')),
-            const SizedBox(width: 10),
-            Expanded(child: _statBox(Icons.access_time, 'Time', '${_driveDurationMin.toStringAsFixed(0)} min')),
-            const SizedBox(width: 10),
-            Expanded(child: _statBox(Icons.payments, 'Total cost', 'RM ${_driveCost.toStringAsFixed(2)}', highlight: true)),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _statBox(Icons.local_gas_station, 'Fuel', 'RM ${_fuelCost.toStringAsFixed(2)}')),
-            const SizedBox(width: 10),
-            Expanded(child: _statBox(Icons.toll, 'Toll (est.)', 'RM ${_tollCost.toStringAsFixed(2)}')),
-          ]),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-            child: const Text(
-              'Fuel is calculated live (fuel price × distance). Toll is estimated using rate × distance, per PLUS\'s own published calculation method — not every route actually uses a toll road, so this is a general estimate, not a route-specific lookup.',
-              style: TextStyle(fontSize: 11, color: Colors.grey, height: 1.4),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _statBox(IconData icon, String label, String value, {bool highlight = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-      decoration: BoxDecoration(
-        color: highlight ? AppColors.teal : Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 6, offset: const Offset(0, 2))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 16, color: highlight ? AppColors.mint : AppColors.amber),
-          const SizedBox(height: 6),
-          Text(label, style: TextStyle(fontSize: 9, color: highlight ? Colors.white70 : Colors.grey)),
-          const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: highlight ? Colors.white : AppColors.teal), overflow: TextOverflow.ellipsis),
-        ],
-      ),
     );
   }
 }

@@ -66,14 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _detectMyLocation() async {
-    setState(() => _locating = true);
+    if (mounted) setState(() => _locating = true);
 
     final granted = await _locationService.isPermissionGranted();
     if (!granted) {
       await _locationService.requestLocationPermission();
       final grantedNow = await _locationService.isPermissionGranted();
       if (!grantedNow) {
-        setState(() => _locating = false);
+        if (mounted) setState(() => _locating = false); // fixed: mounted check added
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -87,7 +87,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final gpsOn = await _locationService.requestEnableGps();
     if (!gpsOn) {
-      setState(() => _locating = false);
+      if (mounted) setState(() => _locating = false); // fixed: mounted check added
       return;
     }
 
@@ -98,7 +98,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final lng = data.longitude;
 
       if (lat == null || lng == null) {
-        setState(() => _locating = false);
+        if (mounted) setState(() => _locating = false); // fixed: mounted check added
         return;
       }
 

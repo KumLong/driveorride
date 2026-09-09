@@ -17,6 +17,7 @@ class ConfirmChoiceScreen extends StatefulWidget {
   final double driveDistanceKm;
   final double driveDurationMin;
   final double driveCost;
+  final List<String> driveSteps;
   final MultiLegJourney? journey;
   final double transitFare;
 
@@ -29,6 +30,7 @@ class ConfirmChoiceScreen extends StatefulWidget {
     required this.driveDistanceKm,
     required this.driveDurationMin,
     required this.driveCost,
+    required this.driveSteps,
     required this.journey,
     required this.transitFare,
   });
@@ -50,6 +52,8 @@ class _ConfirmChoiceScreenState extends State<ConfirmChoiceScreen> {
           routeName: '${widget.originName} -> ${widget.destinationName}',
           routePoints: widget.driveRoutePoints,
           distanceKm: widget.driveDistanceKm,
+          durationMin: widget.driveDurationMin,
+          steps: widget.driveSteps,
           cost: widget.driveCost,
           savedVsAlternative: 0,
         ),
