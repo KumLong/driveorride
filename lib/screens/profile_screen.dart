@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'saved_locations_screen.dart';
 import 'splash_screen.dart';
+import 'login_screen.dart';
 import 'info_screen.dart';
 import '../services/auth_service.dart';
 import '../models/models.dart';
@@ -159,19 +160,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _loading ? 'Loading…' : (_profile?.fullName ?? 'No profile found'),
+                          _loading
+                              ? 'Loading…'
+                              : _auth.isLoggedIn
+                              ? (_profile?.fullName ?? 'No profile found')
+                              : 'Guest User',
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
                         ),
                         Container(
                           margin: const EdgeInsets.only(top: 4),
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
-                          child: const Text('Eco Commuter', style: TextStyle(color: AppColors.mint, fontSize: 11, fontWeight: FontWeight.bold)),
+                          child: Text(
+                            _auth.isLoggedIn ? 'Eco Commuter' : 'Not logged in',
+                            style: const TextStyle(color: AppColors.mint, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  if (!_loading)
+                  if (!_loading && _auth.isLoggedIn)
                     IconButton(
                       onPressed: _editProfile,
                       icon: const Icon(Icons.edit_outlined, color: Colors.white70, size: 20),
@@ -211,7 +219,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'Privacy Policy', sections: AppInfoContent.privacy)))),
                 ]),
                 _sectionCard('ACCOUNT', [
-                  _row(context, icon: Icons.logout, label: 'Log Out', onTap: _logout),
+                  if (_auth.isLoggedIn)
+                    _row(
+                      context,
+                      icon: Icons.logout,
+                      label: 'Log Out',
+                      onTap: _logout,
+                    )
+                  else
+                    _row(
+                      context,
+                      icon: Icons.login,
+                      label: 'Login / Register',
+                      sub: 'Sign in to save your progress',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ).then((_) => _loadProfile()),
+                    ),
                 ]),
                 const SizedBox(height: 8),
                 const Center(child: Text('Powered by open mobility data · SDG Goal 9 🇲🇾', style: TextStyle(fontSize: 10, color: Colors.grey))),

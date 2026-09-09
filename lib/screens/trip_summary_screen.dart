@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 import 'trip_added_screen.dart';
 
@@ -27,6 +28,7 @@ class TripSummaryScreen extends StatefulWidget {
 class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTickerProviderStateMixin {
   final _db = DatabaseService();
   final _supabase = SupabaseService();
+  final _authService = AuthService();
   bool _saving = false;
 
   late final AnimationController _controller;
@@ -76,11 +78,18 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
     );
 
     await _db.insertTrip(trip);
-    try {
-      await _supabase.uploadTrip(trip);
-    } catch (e) {
-      // ignore: avoid_print
-      print('Supabase sync failed: $e');
+
+    // Only sync to Supabase for a REAL logged-in account — a guest
+    // has no account to ever log back into and retrieve synced data
+    // from, so syncing guest data to one shared cloud table would
+    // just mix every guest's trips together across every device.
+    if (_authService.isLoggedIn) {
+      try {
+        await _supabase.uploadTrip(trip);
+      } catch (e) {
+        // ignore: avoid_print
+        print('Supabase sync failed: $e');
+      }
     }
 
     // NEW: apply this trip's real savings toward the user's active

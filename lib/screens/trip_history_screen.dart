@@ -3,6 +3,7 @@ import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 
 /// "Track Savings" screen — matches the reference flow's step 7.
@@ -19,6 +20,7 @@ class TripHistoryScreen extends StatefulWidget {
 class _TripHistoryScreenState extends State<TripHistoryScreen> {
   final _db = DatabaseService();
   final _supabase = SupabaseService();
+  final _authService = AuthService();
   List<TripLogModel> _trips = [];
   double _totalSaved = 0;
 
@@ -44,22 +46,26 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
 
   Future<void> _addManualTrip(TripLogModel trip) async {
     await _db.insertTrip(trip);
-    try {
-      await _supabase.uploadTrip(trip);
-    } catch (e) {
-      // ignore: avoid_print
-      print('Supabase sync failed (check your URL/key in main.dart): $e');
+    if (_authService.isLoggedIn) {
+      try {
+        await _supabase.uploadTrip(trip);
+      } catch (e) {
+        // ignore: avoid_print
+        print('Supabase sync failed (check your URL/key in main.dart): $e');
+      }
     }
     _refresh();
   }
 
   Future<void> _deleteTrip(TripLogModel trip) async {
     await _db.deleteTrip(trip.id!); // local
-    try {
-      await _supabase.deleteTripByMatch(trip.route, trip.createdOn); // remote — keeps both in sync
-    } catch (e) {
-      // ignore: avoid_print
-      print('Supabase delete failed (local delete still succeeded): $e');
+    if (_authService.isLoggedIn) {
+      try {
+        await _supabase.deleteTripByMatch(trip.route, trip.createdOn); // remote — keeps both in sync
+      } catch (e) {
+        // ignore: avoid_print
+        print('Supabase delete failed (local delete still succeeded): $e');
+      }
     }
     _refresh();
   }
@@ -174,17 +180,23 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Clear all trip history?'),
-        content: const Text('This deletes every logged trip — both on this device AND in the cloud (Supabase) — and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone — useful for testing, but be sure before confirming.'),
+        content: Text(
+          _authService.isLoggedIn
+              ? 'This clears all your trips everywhere — this device and your account — and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone.'
+              : 'This clears all your trips on this device and resets your savings, trip count, and CO2 saved back to zero. This can\'t be undone.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               await _db.clearAllTrips(); // local
-              try {
-                await _supabase.deleteAllTrips(); // remote — keeps both in sync
-              } catch (e) {
-                // ignore: avoid_print
-                print('Supabase clear-all failed (local clear still succeeded): $e');
+              if (_authService.isLoggedIn) {
+                try {
+                  await _supabase.deleteAllTrips(); // remote — keeps both in sync, real accounts only
+                } catch (e) {
+                  // ignore: avoid_print
+                  print('Supabase clear-all failed (local clear still succeeded): $e');
+                }
               }
               if (ctx.mounted) Navigator.pop(ctx);
               _refresh();
@@ -306,20 +318,20 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
             const Padding(padding: EdgeInsets.all(16), child: Center(child: Text('No trips logged yet.')))
           else
             ..._trips.map((trip) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    leading: Icon(trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car, color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber),
-                    title: Text(trip.route),
-                    subtitle: Text('${trip.createdOn.substring(0, 10)} • RM ${trip.cost.toStringAsFixed(2)} • ${trip.distanceKm.toStringAsFixed(1)} km'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.mint, fontWeight: FontWeight.bold)),
-                        IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteTrip(trip)),
-                      ],
-                    ),
-                  ),
-                )),
+              margin: const EdgeInsets.only(bottom: 8),
+              child: ListTile(
+                leading: Icon(trip.mode == 'transit' ? Icons.directions_bus : Icons.directions_car, color: trip.mode == 'transit' ? AppColors.mint : AppColors.amber),
+                title: Text(trip.route),
+                subtitle: Text('${trip.createdOn.substring(0, 10)} • RM ${trip.cost.toStringAsFixed(2)} • ${trip.distanceKm.toStringAsFixed(1)} km'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('+RM ${trip.savedVsAlternative.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.mint, fontWeight: FontWeight.bold)),
+                    IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: () => _deleteTrip(trip)),
+                  ],
+                ),
+              ),
+            )),
         ],
       ),
     );
