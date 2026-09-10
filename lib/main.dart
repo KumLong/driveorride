@@ -31,7 +31,20 @@ Future<void> main() async {
   // provided. Placeholder text would otherwise throw on initialize().
   if (supabaseUrl != 'YOUR_SUPABASE_PROJECT_URL' && supabaseUrl.startsWith('http')) {
     try {
-      await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+        // PKCE (the newer default) requires a secret that only exists
+        // on the device that originally requested a password reset —
+        // it can never work when the reset link is opened on a
+        // DIFFERENT device (e.g. requested on this emulator, opened on
+        // a phone's email app), which is exactly what real password
+        // reset needs to support. Switching to the older 'implicit'
+        // flow fixes this, confirmed via Supabase's own server logs
+        // showing "pkce_..." tokens being rejected as invalid the
+        // moment they were opened from a different device.
+        authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.implicit),
+      );
     } catch (e) {
       // ignore: avoid_print
       print('Supabase failed to initialize — check your URL/key: $e');
