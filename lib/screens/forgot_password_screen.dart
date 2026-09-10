@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 
+/// Sends a real, working password-reset link — the user taps it and
+/// completes the reset on a separate webpage (see reset-password.html),
+/// since Supabase's free-tier email template can't be customised to
+/// show an in-app code instead (a real platform restriction, not a
+/// choice made here).
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -13,17 +17,14 @@ class ForgotPasswordScreen extends StatefulWidget {
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _auth = AuthService();
   final _emailCtrl = TextEditingController();
-  final _codeCtrl = TextEditingController();
-  final _newPasswordCtrl = TextEditingController();
 
   bool _loading = false;
-  bool _obscurePassword = true;
-  bool _codeSent = false;
+  bool _linkSent = false;
   String? _error;
 
   static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  Future<void> _sendCode() async {
+  Future<void> _sendLink() async {
     final email = _emailCtrl.text.trim();
     if (!_emailPattern.hasMatch(email)) {
       setState(() => _error = 'Please enter a valid email address.');
@@ -32,46 +33,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await _auth.resetPassword(email);
-      setState(() { _codeSent = true; _loading = false; });
+      setState(() { _linkSent = true; _loading = false; });
     } catch (e) {
-      setState(() { _loading = false; _error = 'Could not send code. Please try again.'; });
-    }
-  }
-
-  Future<void> _resetPassword() async {
-    final code = _codeCtrl.text.trim();
-    final newPassword = _newPasswordCtrl.text;
-    if (code.length != 6) {
-      setState(() => _error = 'Please enter the 6-digit code.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      setState(() => _error = 'Password must be at least 6 characters.');
-      return;
-    }
-    setState(() { _loading = true; _error = null; });
-    try {
-      await _auth.verifyPasswordResetCode(_emailCtrl.text.trim(), code);
-      await _auth.setNewPassword(newPassword);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password updated! Please log in with your new password.')),
-        );
-        Navigator.pop(context);
-      }
-    } on AuthException catch (e) {
-      final msg = e.message.toLowerCase();
-      String friendly;
-      if (msg.contains('expired') || msg.contains('invalid') || msg.contains('otp')) {
-        friendly = 'Invalid or expired code. Please request a new one.';
-      } else if (msg.contains('password')) {
-        friendly = 'Password is too weak. Please use at least 6 characters.';
-      } else {
-        friendly = 'Something went wrong. Please try again.';
-      }
-      setState(() { _loading = false; _error = friendly; });
-    } catch (e) {
-      setState(() { _loading = false; _error = 'Invalid or expired code. Please try again.'; });
+      setState(() { _loading = false; _error = 'Could not send the link. Please try again.'; });
     }
   }
 
@@ -115,54 +79,24 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  _codeSent
-                      ? "Enter the 6-digit code sent to ${_emailCtrl.text.trim()} and your new password."
-                      : "Enter your email and we'll send you a reset code.",
+                  _linkSent
+                      ? "We've sent a reset link to ${_emailCtrl.text.trim()}. Open it on any device to set a new password."
+                      : "Enter your email and we'll send you a link to reset your password.",
                   style: const TextStyle(color: Colors.grey, fontSize: 13),
                 ),
               ),
 
               const SizedBox(height: 24),
 
-              // Email field — always shown
               _label('Email'),
               const SizedBox(height: 6),
               _field(
                 controller: _emailCtrl,
                 hint: 'you@example.com',
                 keyboardType: TextInputType.emailAddress,
-                enabled: !_codeSent,
+                enabled: !_linkSent,
               ),
 
-              // Step 2 fields — shown after code is sent
-              if (_codeSent) ...[
-                const SizedBox(height: 14),
-                _label('6-Digit Code'),
-                const SizedBox(height: 6),
-                _field(
-                  controller: _codeCtrl,
-                  hint: 'Enter code from email',
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                ),
-                const SizedBox(height: 14),
-                _label('New Password'),
-                const SizedBox(height: 6),
-                _field(
-                  controller: _newPasswordCtrl,
-                  hint: 'Create new password',
-                  obscure: _obscurePassword,
-                  suffix: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      color: Colors.grey, size: 20,
-                    ),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                ),
-              ],
-
-              // Error
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -183,29 +117,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
               const SizedBox(height: 20),
 
-              // Action button
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _loading ? null : (_codeSent ? _resetPassword : _sendCode),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.mint,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    elevation: 0,
+              if (!_linkSent)
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _loading ? null : _sendLink,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.mint,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      elevation: 0,
+                    ),
+                    child: _loading
+                        ? const SizedBox(height: 20, width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('Send Link', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
-                  child: _loading
-                      ? const SizedBox(height: 20, width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(_codeSent ? 'Reset Password' : 'Send Code',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
-              ),
 
-              // Check inbox info box — shown after code sent
-              if (_codeSent) ...[
-                const SizedBox(height: 16),
+              // Check inbox info box — shown after the link is sent
+              if (_linkSent) ...[
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -213,21 +145,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(children: [
-                    Icon(Icons.mark_email_read_outlined, color: AppColors.mint, size: 22),
+                    const Icon(Icons.mark_email_read_outlined, color: AppColors.mint, size: 22),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                         Text('Check your inbox',
                             style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.teal, fontSize: 13)),
-                        const SizedBox(height: 2),
-                        const Text('The code expires after 1 hour.',
+                        SizedBox(height: 2),
+                        Text('Tap the link in the email, set a new password there, then come back and log in.',
                             style: TextStyle(color: Colors.grey, fontSize: 12)),
                       ]),
                     ),
                   ]),
                 ),
                 const SizedBox(height: 12),
-                // Resend code
                 TextButton(
                   onPressed: _loading ? null : () async {
                     setState(() { _loading = true; _error = null; });
@@ -236,21 +167,20 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                       setState(() => _loading = false);
                       if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('A new code has been sent.')),
+                          const SnackBar(content: Text('A new link has been sent.')),
                         );
                       }
                     } catch (e) {
                       setState(() { _loading = false; _error = 'Could not resend. Try again.'; });
                     }
                   },
-                  child: Text('Resend code',
+                  child: const Text('Resend link',
                       style: TextStyle(color: AppColors.mint, fontSize: 13, fontWeight: FontWeight.w600)),
                 ),
               ],
 
               const SizedBox(height: 16),
 
-              // Back to login
               TextButton.icon(
                 onPressed: () => Navigator.pop(context),
                 icon: const Icon(Icons.arrow_back, size: 16, color: Colors.grey),
@@ -276,23 +206,16 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     required TextEditingController controller,
     String? hint,
     TextInputType? keyboardType,
-    bool obscure = false,
     bool enabled = true,
-    int? maxLength,
-    Widget? suffix,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      obscureText: obscure,
       enabled: enabled,
-      maxLength: maxLength,
-      buildCounter: maxLength != null ? (_, {required currentLength, required isFocused, maxLength}) => null : null,
       style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        suffixIcon: suffix,
         filled: true,
         fillColor: enabled ? const Color(0xFFF5F5F5) : const Color(0xFFEEEEEE),
         border: OutlineInputBorder(
@@ -305,7 +228,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppColors.mint, width: 1.5),
+          borderSide: const BorderSide(color: AppColors.mint, width: 1.5),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),

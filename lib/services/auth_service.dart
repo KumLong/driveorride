@@ -49,25 +49,12 @@ class AuthService {
 
   Future<void> logout() => _client.auth.signOut();
 
-  /// Sends a password-reset email containing a 6-digit code (not just a
-  /// link) — requires your Supabase project's "Reset Password" email
-  /// template to include {{ .Token }} (Authentication → Email Templates).
+  /// Sends a real Supabase password-reset email with a working link —
+  /// the user taps it, opens a real webpage (hosted separately, see
+  /// reset-password.html) in their browser, and sets a new password
+  /// there. Verification happens entirely on that page, not in this app.
   Future<void> resetPassword(String email) {
     return _client.auth.resetPasswordForEmail(email);
-  }
-
-  /// Verifies the 6-digit code the user received by email. On success,
-  /// this grants a temporary "recovery" session — just enough access to
-  /// call setNewPassword() next, nothing more.
-  Future<void> verifyPasswordResetCode(String email, String code) async {
-    await _client.auth.verifyOTP(type: OtpType.recovery, token: code, email: email);
-  }
-
-  /// Sets the new password — only works right after a successful
-  /// verifyPasswordResetCode() call, since that's what grants the
-  /// temporary session this needs.
-  Future<void> setNewPassword(String newPassword) async {
-    await _client.auth.updateUser(UserAttributes(password: newPassword));
   }
 
   User? get currentUser {
