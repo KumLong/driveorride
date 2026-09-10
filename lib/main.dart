@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'services/gtfs_service.dart';
+import 'services/auth_service.dart';
 import 'screens/splash_screen.dart';
+import 'screens/main_shell.dart';
 import 'theme.dart';
 
 final gtfsService = GtfsService(); // shared instance used across screens
@@ -47,11 +49,18 @@ class DriveOrRideApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // If Supabase already has a real, persisted session (the user
+    // logged in previously and never logged out), skip Splash/Login
+    // entirely and go straight to the main app — matching how most
+    // real apps behave. Only show Splash for a genuinely fresh user
+    // or someone who explicitly logged out.
+    final alreadyLoggedIn = AuthService().isLoggedIn;
+
     return MaterialApp(
       title: 'DriveOrRide',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: const SplashScreen(),
+      home: alreadyLoggedIn ? const MainShell() : const SplashScreen(),
     );
   }
 }

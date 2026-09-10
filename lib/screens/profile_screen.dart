@@ -1,9 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'saved_locations_screen.dart';
 import 'splash_screen.dart';
 import 'login_screen.dart';
 import 'info_screen.dart';
 import '../services/auth_service.dart';
+import '../services/notification_service.dart';
 import '../models/models.dart';
 import '../theme.dart';
 
@@ -16,14 +20,38 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final _auth = AuthService();
+  final _notifications = NotificationService();
   ProfileModel? _profile;
   bool _loading = true;
-  bool _notificationsEnabled = true;
+  bool _notificationsEnabled = false; // corrected from the real system state in initState below, not just assumed off
+
+  // Profile picture — follows Practical 8 (Data File): image_picker to
+  // pick from the Gallery, path_provider to save/load it as a real file
+  // in the app's own local documents folder.
+  File? _profileImage;
+  final _picker = ImagePicker();
+
+  /// Same "owner" concept used for SQLite/Supabase scoping — without
+  /// this, every account (and guest) shared one single profile.png
+  /// file, so whoever uploaded a picture last, everyone else saw it
+  /// too, including a guest with no account of their own.
+  String get _ownerId => _auth.currentUser?.id ?? 'guest';
 
   @override
   void initState() {
     super.initState();
     _loadProfile();
+    _loadProfileImage();
+    _syncNotificationSwitchWithRealState();
+  }
+
+  /// Checks Android's real notification scheduler to set the switch's
+  /// STARTING position correctly — this fixes the bug where the switch
+  /// always showed "off" after an app restart or re-login, even when
+  /// real weekday reminders were still genuinely scheduled underneath.
+  Future<void> _syncNotificationSwitchWithRealState() async {
+    final actuallyScheduled = await _notifications.isReminderScheduled(_ownerId);
+    if (mounted) setState(() => _notificationsEnabled = actuallyScheduled);
   }
 
   Future<void> _loadProfile() async {
@@ -35,41 +63,212 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  /// Loads the previously saved profile picture for the CURRENT
+  /// account only — filename now includes the owner ID, so different
+  /// accounts (and guest) each get their own separate picture instead
+  /// of all sharing one single file.
+  Future<void> _loadProfileImage() async {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    final imagePath = '${appDocDir.path}/profile_$_ownerId.png';
+    final file = File(imagePath);
+    if (await file.exists()) {
+      if (mounted) setState(() => _profileImage = file);
+    } else {
+      // Important: explicitly reset to null when switching accounts —
+      // otherwise the PREVIOUS account's still-loaded image would
+      // keep showing even though this account has none of its own.
+      if (mounted) setState(() => _profileImage = null);
+    }
+  }
+
+  /// Opens the Gallery, lets the user pick a photo, then immediately
+  /// saves it — combined into one step for a simpler tap-to-change
+  /// experience than the practical's separate pick/save buttons.
+  Future<void> _changeProfilePicture() async {
+    final pickedFile = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+    if (pickedFile == null) return; // user cancelled the picker
+
+    try {
+      final appDocDir = await getApplicationDocumentsDirectory();
+      final newImagePath = '${appDocDir.path}/profile_$_ownerId.png';
+      final savedImage = await File(pickedFile.path).copy(newImagePath);
+      if (mounted) setState(() => _profileImage = savedImage);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated.')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not save profile picture: $e')));
+    }
+  }
+
+  Widget _styledEditField({required TextEditingController ctrl, required String label, required IconData icon, TextInputType? keyboardType, String? errorText, ValueChanged<String>? onChanged}) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: keyboardType,
+      onChanged: onChanged,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: errorText != null ? Colors.redAccent : AppColors.mint, size: 20),
+        filled: true,
+        fillColor: AppColors.bg,
+        errorText: errorText, // non-null automatically turns the border/label red and shows the message below
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+      ),
+    );
+  }
+
+  /// Matches the exact rule your practical suggests: letters, spaces,
+  /// and common name punctuation (hyphens, apostrophes) only — no
+  /// digits or other symbols.
+  String? _validateName(String value) {
+    final name = value.trim();
+    if (name.isEmpty) return null; // don't show an error before the user has typed anything
+    if (!RegExp(r"^[a-zA-Z\s\-']+$").hasMatch(name)) return 'Name can only contain letters, spaces, hyphens, and apostrophes.';
+    if (name.length < 2) return 'Please enter your full name.';
+    return null;
+  }
+
+  String? _validatePhone(String value) {
+    final phone = value.trim();
+    if (phone.isEmpty) return null; // phone is optional
+    if (!RegExp(r'^[0-9]+$').hasMatch(phone)) return 'Numbers only, no letters or symbols.';
+    if (phone.length < 9 || phone.length > 11) return 'Enter a valid phone number (9-11 digits).';
+    return null;
+  }
+
   Future<void> _editProfile() async {
     final nameCtrl = TextEditingController(text: _profile?.fullName ?? '');
     final phoneCtrl = TextEditingController(text: _profile?.phone ?? '');
+    String? nameError;
+    String? phoneError;
+
+    // Save button is only enabled once the name is genuinely non-empty
+    // and valid, and phone (if entered at all) is valid — this is
+    // recalculated on every keystroke below.
+    bool canSave() => nameCtrl.text.trim().isNotEmpty && _validateName(nameCtrl.text) == null && _validatePhone(phoneCtrl.text) == null;
 
     final saved = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Profile'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
-            const SizedBox(height: 12),
-            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone'), keyboardType: TextInputType.phone),
-          ],
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 44, height: 44,
+                      decoration: BoxDecoration(color: AppColors.mintLight, borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.person_outline, color: AppColors.mint),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.teal)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _styledEditField(
+                  ctrl: nameCtrl,
+                  label: 'Full Name',
+                  icon: Icons.badge_outlined,
+                  errorText: nameError,
+                  onChanged: (value) {
+                    setDialogState(() => nameError = _validateName(value));
+                  },
+                ),
+                const SizedBox(height: 12),
+                _styledEditField(
+                  ctrl: phoneCtrl,
+                  label: 'Phone',
+                  icon: Icons.phone_outlined,
+                  keyboardType: TextInputType.phone,
+                  errorText: phoneError,
+                  onChanged: (value) {
+                    setDialogState(() => phoneError = _validatePhone(value));
+                  },
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel'))),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        // Disabled (greyed out, does nothing when tapped)
+                        // until the data is genuinely valid — the dialog
+                        // can now ONLY close via a successful Save or
+                        // via Cancel, never by tapping an invalid Save.
+                        onPressed: canSave() ? () => Navigator.pop(dialogContext, true) : null,
+                        child: const Text('Save'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Save')),
-        ],
       ),
     );
 
     if (saved != true) return;
-    if (nameCtrl.text.trim().isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name cannot be empty.')));
-      return;
-    }
+
+    // At this point Save could only have been tapped while valid, so
+    // this is now just a safety net, not the primary validation gate.
+    final name = nameCtrl.text.trim();
+    final phone = phoneCtrl.text.trim();
 
     try {
-      await _auth.updateProfile(fullName: nameCtrl.text.trim(), phone: phoneCtrl.text.trim());
+      await _auth.updateProfile(fullName: name, phone: phone);
       await _loadProfile();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated.')));
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update profile.')));
+    }
+  }
+
+  /// Turning this on now genuinely schedules 5 real, repeating local
+  /// notifications (Mon-Fri, 7:30 AM) via NotificationService — this
+  /// used to just flip a variable and show a SnackBar, with nothing
+  /// actually scheduled.
+  Future<void> _onToggleNotifications(bool value) async {
+    try {
+      if (value) {
+        final granted = await _notifications.requestPermission();
+        if (!granted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Notification permission denied. Please enable it in your phone\'s settings.')),
+            );
+          }
+          return; // don't flip the switch on if permission was refused
+        }
+        await _notifications.scheduleWeekdayReminder(_ownerId, hour: 7, minute: 30);
+      } else {
+        await _notifications.cancelWeekdayReminder(_ownerId);
+      }
+
+      setState(() => _notificationsEnabled = value);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(value ? 'Daily commute reminder scheduled for 7:30 AM on weekdays.' : 'Daily commute reminder turned off.')),
+        );
+      }
+    } catch (e) {
+      // Without this catch, any error here (e.g. from the native
+      // notification scheduling call) would silently stop the function
+      // BEFORE reaching setState() — which is exactly why the switch
+      // could get permission granted but still never visually toggle.
+      // ignore: avoid_print
+      print('Notification scheduling failed: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not set up the reminder: $e')),
+        );
+      }
     }
   }
 
@@ -144,15 +343,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 30,
-                    backgroundColor: AppColors.mint,
-                    child: _loading
-                        ? const SizedBox(
-                      width: 18, height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                        : Text(_profile?.initials ?? '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: AppColors.mint,
+                        backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                        child: _loading
+                            ? const SizedBox(
+                          width: 18, height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                            : (_profileImage == null ? Text(_profile?.initials ?? '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)) : null),
+                      ),
+                      if (!_loading && _auth.isLoggedIn)
+                        Positioned(
+                          bottom: 0, right: 0,
+                          child: GestureDetector(
+                            onTap: _changeProfilePicture,
+                            child: Container(
+                              width: 22, height: 22,
+                              decoration: BoxDecoration(color: AppColors.amber, shape: BoxShape.circle, border: Border.all(color: AppColors.teal, width: 2)),
+                              child: const Icon(Icons.camera_alt, size: 11, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(width: 16),
                   Expanded(
@@ -202,12 +418,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       trailing: Switch(
                         value: _notificationsEnabled,
                         activeColor: AppColors.mint,
-                        onChanged: (value) {
-                          setState(() => _notificationsEnabled = value);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(value ? 'Daily commute reminder turned on.' : 'Daily commute reminder turned off.')),
-                          );
-                        },
+                        onChanged: _onToggleNotifications,
                       )),
                 ]),
                 _sectionCard('ABOUT', [
@@ -235,7 +446,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(builder: (_) => const LoginScreen()),
-                      ).then((_) => _loadProfile()),
+                      ).then((_) {
+                        // Refresh everything tied to the account, not
+                        // just the name/email — otherwise a guest who
+                        // just logged in would still see the guest's
+                        // old picture/notification state until a full
+                        // app restart.
+                        _loadProfile();
+                        _loadProfileImage();
+                        _syncNotificationSwitchWithRealState();
+                      }),
                     ),
                 ]),
                 const SizedBox(height: 8),

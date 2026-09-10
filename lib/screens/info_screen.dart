@@ -3,6 +3,8 @@ import '../theme.dart';
 
 /// Reusable scrollable text screen — used for About, Terms & Conditions,
 /// and Privacy Policy so we don't repeat the same layout three times.
+/// Restyled to match the app's card-based visual language, instead of
+/// plain unstyled text on a background.
 class InfoScreen extends StatelessWidget {
   final String title;
   final List<InfoSection> sections;
@@ -12,18 +14,45 @@ class InfoScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bg,
       appBar: AppBar(title: Text(title)),
       body: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         children: [
-          for (final section in sections) ...[
-            if (section.heading != null) ...[
-              Text(section.heading!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.teal)),
-              const SizedBox(height: 6),
-            ],
-            Text(section.body, style: const TextStyle(fontSize: 13, height: 1.5, color: Colors.black87)),
-            const SizedBox(height: 18),
-          ],
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (int i = 0; i < sections.length; i++) ...[
+                  if (i > 0) ...[
+                    const SizedBox(height: 8),
+                    Divider(color: Colors.grey.shade100, height: 1),
+                    const SizedBox(height: 20),
+                  ],
+                  if (sections[i].heading != null) ...[
+                    Row(
+                      children: [
+                        Container(
+                          width: 4, height: 16,
+                          decoration: BoxDecoration(color: AppColors.mint, borderRadius: BorderRadius.circular(2)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(sections[i].heading!, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.teal)),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  Text(sections[i].body, style: const TextStyle(fontSize: 13, height: 1.6, color: Colors.black87)),
+                ],
+              ],
+            ),
+          ),
         ],
       ),
     );

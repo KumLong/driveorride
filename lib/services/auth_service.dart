@@ -2,7 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 
 /// Real authentication using Supabase Auth. Handles register, login,
-/// logout, and session check.
+/// logout, password reset, and session check.
 ///
 /// ⚠️ Requires your Supabase project URL/key to be set up in main.dart.
 /// Until then, calling register()/login() will throw a clear error
@@ -48,6 +48,27 @@ class AuthService {
   }
 
   Future<void> logout() => _client.auth.signOut();
+
+  /// Sends a password-reset email containing a 6-digit code (not just a
+  /// link) — requires your Supabase project's "Reset Password" email
+  /// template to include {{ .Token }} (Authentication → Email Templates).
+  Future<void> resetPassword(String email) {
+    return _client.auth.resetPasswordForEmail(email);
+  }
+
+  /// Verifies the 6-digit code the user received by email. On success,
+  /// this grants a temporary "recovery" session — just enough access to
+  /// call setNewPassword() next, nothing more.
+  Future<void> verifyPasswordResetCode(String email, String code) async {
+    await _client.auth.verifyOTP(type: OtpType.recovery, token: code, email: email);
+  }
+
+  /// Sets the new password — only works right after a successful
+  /// verifyPasswordResetCode() call, since that's what grants the
+  /// temporary session this needs.
+  Future<void> setNewPassword(String newPassword) async {
+    await _client.auth.updateUser(UserAttributes(password: newPassword));
+  }
 
   User? get currentUser {
     try {
