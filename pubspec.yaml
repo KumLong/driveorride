@@ -36,3 +36,4 @@ flutter:
   assets:
     - assets/gtfs/
     - assets/icon/logo.png
+    - assets/icon/splashscreen.png

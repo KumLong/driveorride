@@ -227,7 +227,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.teal, Color(0xFF025D6A)]), borderRadius: BorderRadius.circular(16)),
+            decoration: BoxDecoration(gradient: const LinearGradient(colors: [AppColors.mint, Color(0xFF025D6A)]), borderRadius: BorderRadius.circular(16)),
             child: Row(
               children: [
                 const Icon(Icons.account_balance_wallet, color: Colors.white, size: 32),
@@ -235,9 +235,9 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Total Saved', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    const Text('Total Saved', style: TextStyle(color: Colors.white, fontSize: 12)),
                     Text('RM ${_totalSaved.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-                    const Text('vs. always driving', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                    const Text('vs. always driving', style: TextStyle(color: Colors.white, fontSize: 11)),
                   ],
                 ),
               ],

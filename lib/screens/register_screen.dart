@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 import 'login_screen.dart';
+import 'info_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,9 +19,35 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _phoneCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
+  bool _obscurePassword = true;
   String? _error;
 
   static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  // Name: letters, spaces, hyphens and apostrophes only (no numbers)
+  static final _namePattern = RegExp(r"^[a-zA-Z\s\-']+$");
+
+  // Malaysian phone: starts with 01, followed by 8-9 more digits (10-11 total)
+  // Accepts formats: 0123456789, 012-3456789, 012 3456789
+  static final _phonePattern = RegExp(r'^01[0-9]{8,9}$');
+
+  String? _validateName(String name) {
+    if (name.isEmpty) return 'Please enter your full name.';
+    if (name.length < 2) return 'Name must be at least 2 characters.';
+    if (!_namePattern.hasMatch(name)) return 'Name cannot contain numbers or special characters.';
+    return null;
+  }
+
+  String? _validatePhone(String raw) {
+    // Strip dashes, spaces, and parentheses before checking
+    final digits = raw.replaceAll(RegExp(r'[\s\-()]'), '');
+    if (digits.isEmpty) return 'Please enter your phone number.';
+    if (RegExp(r'[a-zA-Z]').hasMatch(raw)) return 'Phone number cannot contain letters.';
+    if (RegExp(r'[^0-9\s\-()]').hasMatch(raw)) return 'Phone number cannot contain special characters.';
+    if (!digits.startsWith('01')) return 'Malaysian phone numbers must start with 01.';
+    if (!_phonePattern.hasMatch(digits)) return 'Enter a valid Malaysian number (e.g. 012-3456789).';
+    return null;
+  }
 
   Future<void> _register() async {
     final fullName = _fullNameCtrl.text.trim();
@@ -28,18 +55,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final phone = _phoneCtrl.text.trim();
     final password = _passwordCtrl.text;
 
-    if (fullName.isEmpty) {
-      setState(() => _error = 'Please enter your full name.');
+    // Name validation — no numbers or special characters
+    final nameError = _validateName(fullName);
+    if (nameError != null) {
+      setState(() => _error = nameError);
       return;
     }
+
+    // Email validation
     if (email.isEmpty || !_emailPattern.hasMatch(email)) {
-      setState(() => _error = 'Please enter a valid email address.');
+      setState(() => _error = 'Please enter a valid email address (e.g. you@example.com).');
       return;
     }
-    if (phone.isEmpty) {
-      setState(() => _error = 'Please enter your phone number.');
+
+    // Phone validation — Malaysian format
+    final phoneError = _validatePhone(phone);
+    if (phoneError != null) {
+      setState(() => _error = phoneError);
       return;
     }
+
+    // Password validation
     if (password.length < 6) {
       setState(() => _error = 'Password must be at least 6 characters.');
       return;
@@ -50,92 +86,252 @@ class _RegisterScreenState extends State<RegisterScreen> {
       await _auth.register(email, password, fullName: fullName, phone: phone);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account created! Check your email to confirm, then log in.')),
+          const SnackBar(content: Text('Account created! Please log in.')),
         );
-        // Navigate forward to LoginScreen rather than popping — RegisterScreen
-        // may be the only route on the stack (e.g. reached via Splash's
-        // "Get Started" button, which uses pushReplacement), so pop(context)
-        // would have nothing to return to and leave a blank screen.
-        Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen()));
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const LoginScreen()));
       }
     } on AuthException catch (e) {
-      setState(() => _error = _friendlyRegisterError(e));
+      setState(() => _error = _friendlyError(e));
     } catch (e) {
-      setState(() => _error = 'Something went wrong. Please check your connection and try again.');
+      setState(() => _error = 'Something went wrong. Please check your connection.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// Maps Supabase's raw auth error text to a plain, user-facing message.
-  String _friendlyRegisterError(AuthException e) {
+  String _friendlyError(AuthException e) {
     final msg = e.message.toLowerCase();
-    if (msg.contains('already registered') || msg.contains('already exists') || msg.contains('user already registered')) {
+    if (msg.contains('already registered') || msg.contains('already exists')) {
       return 'This email is already registered. Try logging in instead.';
     }
-    if (msg.contains('password')) {
-      return 'Password must be at least 6 characters.';
-    }
-    if (msg.contains('invalid') && msg.contains('email')) {
-      return 'Please enter a valid email address.';
-    }
+    if (msg.contains('password')) return 'Password must be at least 6 characters.';
+    if (msg.contains('invalid') && msg.contains('email')) return 'Please enter a valid email address.';
     return 'Registration failed. Please try again.';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.teal,
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, iconTheme: const IconThemeData(color: Colors.white)),
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const Text('Create Account', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 40),
+
+              // Logo + app name + tagline
+              Image.asset('assets/icon/logo.png', width: 80, height: 80),
+              const SizedBox(height: 10),
+              RichText(
+                text: TextSpan(
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+                  children: [
+                    TextSpan(text: 'DriveOr', style: TextStyle(color: AppColors.teal)),
+                    TextSpan(text: 'Ride', style: TextStyle(color: AppColors.mint)),
+                  ],
+                ),
+              ),
               const SizedBox(height: 4),
-              const Text('Join DriveOrRide today', style: TextStyle(color: AppColors.mint, fontSize: 13)),
+              const Text(
+                'Smarter rides. Better choices.',
+                style: TextStyle(color: Colors.grey, fontSize: 15),
+              ),
+
               const SizedBox(height: 32),
-              TextField(
-                controller: _fullNameCtrl,
-                style: const TextStyle(color: AppColors.teal),
-                decoration: InputDecoration(labelText: 'Full Name', prefixIcon: const Icon(Icons.person_outline), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)),
+
+              // Page title
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Create account',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A2E))),
               ),
-              const SizedBox(height: 12),
-              TextField(
+              const SizedBox(height: 4),
+              const Align(
+                alignment: Alignment.centerLeft,
+                child: Text('Start making smarter travel choices.',
+                    style: TextStyle(color: Colors.grey, fontSize: 13)),
+              ),
+
+              const SizedBox(height: 24),
+
+              // Name
+              _label('Name'),
+              const SizedBox(height: 6),
+              _field(controller: _fullNameCtrl, hint: 'Your name'),
+              const SizedBox(height: 14),
+
+              // Email
+              _label('Email'),
+              const SizedBox(height: 6),
+              _field(
                 controller: _emailCtrl,
+                hint: 'you@example.com',
                 keyboardType: TextInputType.emailAddress,
-                style: const TextStyle(color: AppColors.teal),
-                decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_outlined), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)),
               ),
-              const SizedBox(height: 12),
-              TextField(
+              const SizedBox(height: 14),
+
+              // Phone
+              _label('Phone'),
+              const SizedBox(height: 6),
+              _field(
                 controller: _phoneCtrl,
+                hint: '01X-XXXXXXXX',
                 keyboardType: TextInputType.phone,
-                style: const TextStyle(color: AppColors.teal),
-                decoration: InputDecoration(labelText: 'Phone', prefixIcon: const Icon(Icons.phone_outlined), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)),
               ),
-              const SizedBox(height: 12),
-              TextField(
+              const SizedBox(height: 14),
+
+              // Password
+              _label('Password'),
+              const SizedBox(height: 6),
+              _field(
                 controller: _passwordCtrl,
-                obscureText: true,
-                style: const TextStyle(color: AppColors.teal),
-                decoration: InputDecoration(labelText: 'Password (6+ characters)', prefixIcon: const Icon(Icons.lock_outline), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none)),
+                hint: 'Create a password',
+                obscure: _obscurePassword,
+                suffix: IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    color: Colors.grey, size: 20,
+                  ),
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                ),
               ),
-              if (_error != null) Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(_error!, style: const TextStyle(color: Colors.orangeAccent, fontSize: 12)),
-              ),
+
+              // Error
+              if (_error != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.error_outline, color: Colors.redAccent, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(_error!,
+                        style: const TextStyle(color: Colors.redAccent, fontSize: 12))),
+                  ]),
+                ),
+              ],
+
               const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _loading ? null : _register,
-                child: _loading ? const CircularProgressIndicator(color: Colors.white) : const Text('Register'),
+
+              // Create Account button
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _loading ? null : _register,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.mint,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    elevation: 0,
+                  ),
+                  child: _loading
+                      ? const SizedBox(height: 20, width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text('Create Account',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Terms — each link goes to its own screen
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('By continuing, you agree to our ',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const InfoScreen(
+                          title: 'Terms & Conditions',
+                          sections: AppInfoContent.terms,
+                        ))),
+                    child: Text('Terms',
+                        style: TextStyle(color: AppColors.mint, fontWeight: FontWeight.w600, fontSize: 12)),
+                  ),
+                  const Text(' & ', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const InfoScreen(
+                          title: 'Privacy Policy',
+                          sections: AppInfoContent.privacy,
+                        ))),
+                    child: Text('Privacy Policy',
+                        style: TextStyle(color: AppColors.mint, fontWeight: FontWeight.w600, fontSize: 12)),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // Already have account
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('Already have an account? ',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  GestureDetector(
+                    onTap: () => Navigator.pushReplacement(context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen())),
+                    child: Text('Log in',
+                        style: TextStyle(color: AppColors.mint, fontWeight: FontWeight.bold, fontSize: 13)),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _label(String text) => Align(
+    alignment: Alignment.centerLeft,
+    child: Text(text,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A1A2E))),
+  );
+
+  Widget _field({
+    required TextEditingController controller,
+    String? hint,
+    TextInputType? keyboardType,
+    bool obscure = false,
+    Widget? suffix,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscure,
+      style: const TextStyle(fontSize: 14, color: Color(0xFF1A1A2E)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: const Color(0xFFF5F5F5),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.mint, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }

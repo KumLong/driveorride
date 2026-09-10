@@ -9,29 +9,113 @@ class SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.teal,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/icon/logo.png', width: 100, height: 100),
-            const SizedBox(height: 16),
-            const Text('DriveOrRide', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
-            const Text('Smarter choices. Better commute.', style: TextStyle(color: AppColors.mint, fontSize: 13)),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: 220,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const RegisterScreen())),
-                child: const Text('Get Started'),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Full screen background image
+          Image.asset(
+            'assets/icon/splashscreen.png',
+            fit: BoxFit.cover,
+          ),
+
+          // Tagline overlaid just below "DriveOrRide" text in the image
+          Positioned(
+            left: 0, right: 0,
+            top: MediaQuery.of(context).size.height * 0.44,
+            child: const Text(
+              'Smarter choices. Better commute.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: AppColors.mint,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
               ),
             ),
-            TextButton(
-              onPressed: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const LoginScreen())),
-              child: const Text('Log In', style: TextStyle(color: AppColors.mint)),
+          ),
+
+          // Subtle gradient only at the very bottom for button readability
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: Container(
+              height: 260,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.55),
+                    Colors.black.withOpacity(0.75),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+
+          // Tagline + buttons pinned to bottom
+          Positioned(
+            left: 0, right: 0, bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 0),
+
+                    // Get Started button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pushReplacement(
+                          context,
+                          MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.mint,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Text(
+                          'Get Started',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Log In
+                    TextButton(
+                      onPressed: () => Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      ),
+                      child: const Text(
+                        'Log In',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
