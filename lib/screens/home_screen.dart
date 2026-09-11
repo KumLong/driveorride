@@ -37,6 +37,22 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _headerHeight = 170;
   static const double _cardTopMargin = 130;
 
+  /// Same icon-matching logic as Savings Goals screen — kept
+  /// identical so a goal always shows the same icon everywhere in
+  /// the app, not a generic one here and a matched one there.
+  IconData _goalIcon(String name) {
+    final n = name.toLowerCase();
+    if (n.contains('holiday') || n.contains('travel') || n.contains('trip') || n.contains('vacation')) return Icons.flight_takeoff_rounded;
+    if (n.contains('phone') || n.contains('gadget')) return Icons.smartphone_rounded;
+    if (n.contains('laptop') || n.contains('computer') || n.contains('tech')) return Icons.laptop_rounded;
+    if (n.contains('education') || n.contains('study') || n.contains('school') || n.contains('course')) return Icons.school_rounded;
+    if (n.contains('car') || n.contains('vehicle')) return Icons.directions_car_rounded;
+    if (n.contains('home') || n.contains('house')) return Icons.home_rounded;
+    if (n.contains('emergency') || n.contains('safety')) return Icons.shield_rounded;
+    if (n.contains('shop') || n.contains('cloth')) return Icons.shopping_bag_rounded;
+    return Icons.star_rounded;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -60,7 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
         _totalSaved = total;
         _recentTrips = trips.take(2).toList();
         _savedLocations = locations;
-        _activeGoal = goals.isNotEmpty ? goals.first : null;
+        _activeGoal = goals.isNotEmpty
+            ? goals.firstWhere(
+              (g) => g.progressPercent < 100,
+          orElse: () => goals.first,
+        )
+            : null;
       });
     }
   }
@@ -457,7 +478,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const SavingsGoalsScreen()),
+                        MaterialPageRoute(builder: (_) => const SavingsGoalsScreen(showBackButton: true)),
                       ).then((_) => _refreshRealData()),
                       child: Container(
                         padding: const EdgeInsets.all(14),
@@ -471,12 +492,16 @@ class _HomeScreenState extends State<HomeScreen> {
                           children: [
                             Row(
                               children: [
-                                const Icon(Icons.track_changes, color: AppColors.amber, size: 18),
-                                const SizedBox(width: 8),
+                                Container(
+                                  width: 32, height: 32,
+                                  decoration: BoxDecoration(color: AppColors.mintLight, borderRadius: BorderRadius.circular(8)),
+                                  child: Icon(_goalIcon(_activeGoal!.name), color: AppColors.mint, size: 18),
+                                ),
+                                const SizedBox(width: 10),
                                 Expanded(
                                   child: Text(
                                     _activeGoal!.name,
-                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.teal),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1A1A2E)),
                                   ),
                                 ),
                                 Text(

@@ -20,6 +20,8 @@ class ConfirmChoiceScreen extends StatefulWidget {
   final List<String> driveSteps;
   final MultiLegJourney? journey;
   final double transitFare;
+  final int walkToFirstStationMin;
+  final int walkFromLastStationMin;
 
   const ConfirmChoiceScreen({
     super.key,
@@ -33,6 +35,8 @@ class ConfirmChoiceScreen extends StatefulWidget {
     required this.driveSteps,
     required this.journey,
     required this.transitFare,
+    required this.walkToFirstStationMin,
+    required this.walkFromLastStationMin,
   });
 
   @override
@@ -64,6 +68,8 @@ class _ConfirmChoiceScreenState extends State<ConfirmChoiceScreen> {
           journey: widget.journey!,
           fare: widget.transitFare,
           savedVsAlternative: _savedIfTransit,
+          walkToFirstStationMin: widget.walkToFirstStationMin,
+          walkFromLastStationMin: widget.walkFromLastStationMin,
         ),
       ));
     }

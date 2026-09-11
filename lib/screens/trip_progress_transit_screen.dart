@@ -20,14 +20,22 @@ class TripProgressTransitScreen extends StatefulWidget {
   final MultiLegJourney journey;
   final double fare;
   final double savedVsAlternative;
-  const TripProgressTransitScreen({super.key, required this.journey, required this.fare, required this.savedVsAlternative});
+  final int walkToFirstStationMin;
+  final int walkFromLastStationMin;
+  const TripProgressTransitScreen({
+    super.key,
+    required this.journey,
+    required this.fare,
+    required this.savedVsAlternative,
+    required this.walkToFirstStationMin,
+    required this.walkFromLastStationMin,
+  });
 
   @override
   State<TripProgressTransitScreen> createState() => _TripProgressTransitScreenState();
 }
 
 class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
-  static const _walkToFirstStationMinutes = 5;
   static const _transferBufferMinutes = 3;
 
   int _activeFlatIndex = 0;
@@ -37,7 +45,10 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
   @override
   void initState() {
     super.initState();
-    _flatSteps = _flattenJourney(DateTime.now().add(const Duration(minutes: _walkToFirstStationMinutes)));
+    // Real walk time to the first station, not a hardcoded guess —
+    // this was the bug: a flat 5-minute assumption regardless of
+    // whether the real walk was 2 minutes or 20.
+    _flatSteps = _flattenJourney(DateTime.now().add(Duration(minutes: widget.walkToFirstStationMin)));
     _computeActiveStop();
     _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _computeActiveStop());
   }
@@ -265,7 +276,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                     children: [
                       Expanded(
                         child: Column(children: [
-                          Text('${widget.journey.totalDurationMinutes} min', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.teal)),
+                          Text('${widget.journey.totalDurationMinutes + widget.walkToFirstStationMin + widget.walkFromLastStationMin} min', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.teal)),
                           const Text('Total time', style: TextStyle(fontSize: 10, color: Colors.grey)),
                         ]),
                       ),

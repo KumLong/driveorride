@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
+import '../services/database_service.dart';
+import '../services/supabase_service.dart';
 import '../theme.dart';
 import 'main_shell.dart';
 import 'register_screen.dart';
@@ -15,6 +17,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _auth = AuthService();
+  final _db = DatabaseService();
+  final _supabase = SupabaseService();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _loading = false;
@@ -39,6 +43,19 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() { _loading = true; _error = null; });
     try {
       await _auth.login(email, password);
+
+      // Block this login immediately if the account was previously
+      // deleted — the raw Supabase Auth check itself can't be
+      // prevented from succeeding (that would need an admin key that
+      // must never be in a mobile app), so instead we let it succeed,
+      // detect the deletion right here, and immediately reverse it.
+      final wasDeleted = await _auth.checkIfDeletedAndSignOutIfSo();
+      if (wasDeleted) {
+        setState(() => _error = 'This account has been deleted and can no longer be used.');
+        return;
+      }
+
+      await _syncMissingTrips();
       if (mounted) {
         Navigator.pushAndRemoveUntil(context,
             MaterialPageRoute(builder: (_) => const MainShell()), (route) => false);
@@ -49,6 +66,24 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() => _error = 'Something went wrong. Please check your connection.');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Fills in any real trips missing from THIS device's local storage
+  /// by comparing against Supabase — fixes the earlier limitation
+  /// where trips added on one device wouldn't show up on another
+  /// unless local storage started out completely empty. Wrapped in
+  /// try/catch so a sync failure (e.g. no internet right now) never
+  /// blocks the login itself from completing.
+  Future<void> _syncMissingTrips() async {
+    try {
+      final remoteTrips = await _supabase.fetchTrips();
+      if (remoteTrips.isNotEmpty) {
+        await _db.syncMissingTripsFromRemote(remoteTrips);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Trip sync failed (login still succeeded): $e');
     }
   }
 

@@ -78,6 +78,47 @@ class AuthService {
     }).eq('id', user.id);
   }
 
+  /// "Deletes" the logged-in user's profile — but as a SOFT delete
+  /// (marking is_deleted = true and clearing name/phone), not a hard
+  /// row deletion. This is what makes it possible to actually block
+  /// the account from being used again afterward: a fully deleted row
+  /// would leave nothing to check against on the next login attempt.
+  /// Real personal data (name, phone) is still genuinely erased —
+  /// only a bare marker row remains.
+  Future<void> deleteProfile() async {
+    final user = currentUser;
+    if (user == null) throw Exception('Not logged in');
+    await _client.from('profiles').update({
+      'is_deleted': true,
+      'full_name': null,
+      'phone': null,
+    }).eq('id', user.id);
+  }
+
+  /// Checks whether the CURRENTLY logged-in account was previously
+  /// deleted — if so, immediately signs them back out. This is what
+  /// actually blocks a "deleted" account from being used again: since
+  /// we can't safely prevent Supabase's own login check from
+  /// succeeding (that requires an admin key that must never be in a
+  /// mobile app), we instead let the login technically succeed, then
+  /// immediately reverse it at the app level the moment we detect the
+  /// account was deleted.
+  Future<bool> checkIfDeletedAndSignOutIfSo() async {
+    final user = currentUser;
+    if (user == null) return false;
+    try {
+      final data = await _client.from('profiles').select('is_deleted').eq('id', user.id).maybeSingle();
+      final isDeleted = data != null && data['is_deleted'] == true;
+      if (isDeleted) {
+        await logout();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      return false; // if this check itself fails, don't block a real user's login over it
+    }
+  }
+
   /// Fetches the logged-in user's row from the `profiles` table — this is
   /// what makes the Profile screen show the actual name/phone entered at
   /// registration, instead of hardcoded placeholder text. Returns null if

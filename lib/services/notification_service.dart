@@ -109,6 +109,34 @@ class NotificationService {
     }
   }
 
+  /// Shows an immediate one-time notification — used for goal milestones
+  /// like reaching 80% or completing a goal. No scheduling needed.
+  Future<void> showImmediate({
+    required int id,
+    required String title,
+    required String body,
+  }) async {
+    await _ensureInitialized();
+    const details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'goal_milestones',
+        'Goal Milestones',
+        channelDescription: 'Notifications for savings goal milestones',
+        importance: Importance.high,
+        priority: Priority.high,
+        icon: '@mipmap/ic_launcher',
+      ),
+    );
+    await _plugin.show(id: id, title: title, body: body, notificationDetails: details);
+  }
+
+  /// Cancels the milestone notification for a specific goal ID
+  /// — called when a goal is deleted so old notifications are cleaned up
+  Future<void> cancelGoalNotification(int goalId) async {
+    await _ensureInitialized();
+    await _plugin.cancel(id: 9000 + goalId);
+  }
+
   /// Cancels only THIS account's 5 weekday reminders — leaves every
   /// other account's reminders untouched.
   Future<void> cancelWeekdayReminder(String ownerId) async {

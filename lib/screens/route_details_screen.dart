@@ -95,6 +95,12 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   }
 
   void _onConfirm() {
+    // Real walking time to/from the actual stations — computed here
+    // (not a guess) so the "On the Way" screen can show an accurate
+    // total time and starting point, instead of a hardcoded constant.
+    final walkToFirstStationMin = _originStation != null ? _estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon)) : 5;
+    final walkFromLastStationMin = _destStation != null ? _estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination) : 5;
+
     Navigator.push(context, MaterialPageRoute(
       builder: (_) => ConfirmChoiceScreen(
         destination: widget.destination,
@@ -107,6 +113,8 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
         driveSteps: _driveSteps,
         journey: _journey,
         transitFare: _transitFareEstimate,
+        walkToFirstStationMin: walkToFirstStationMin,
+        walkFromLastStationMin: walkFromLastStationMin,
       ),
     ));
   }
@@ -361,7 +369,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
       padding: const EdgeInsets.all(16),
       children: [
         _statsRow([
-          ('Travel time', '${j.totalDurationMinutes} min'),
+          ('Travel time', '${j.totalDurationMinutes + walkToFirstStationMinutes + _estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination)} min'),
           ('Est. fare', 'RM ${_transitFareEstimate.toStringAsFixed(2)}'),
           ('Transfers', j.needsTransfer ? '1' : '0'),
         ]),

@@ -92,26 +92,29 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
       }
     }
 
-    // NEW: apply this trip's real savings toward the user's active
-    // savings goal, so the progress bar on Savings Goals actually
-    // moves — this connection didn't exist before, which is why goals
-    // never increased regardless of how much was saved on real trips.
+    // Credits this trip's real savings toward EVERY currently active
+    // (not-yet-complete) goal at once — not just a single "first" goal.
+    // This is also what makes a brand-new goal start genuinely at
+    // RM0: it simply isn't in this list yet for any trip completed
+    // before it was created, so it can never retroactively gain
+    // progress from savings that happened earlier.
     if (widget.savedVsAlternative > 0) {
       try {
         final goals = await _db.getGoals();
-        if (goals.isNotEmpty) {
-          final activeGoal = goals.first; // matches Home screen's "active goal" logic
+        for (final goal in goals) {
+          if (goal.progressPercent >= 100) continue; // already complete, don't add more
           final updatedGoal = SavingsGoalModel(
-            id: activeGoal.id,
-            name: activeGoal.name,
-            targetAmount: activeGoal.targetAmount,
-            savedAmount: activeGoal.savedAmount + widget.savedVsAlternative,
+            id: goal.id,
+            name: goal.name,
+            targetAmount: goal.targetAmount,
+            savedAmount: goal.savedAmount + widget.savedVsAlternative,
+            celebrated: goal.celebrated, // preserve — this update must never silently reset it
           );
           await _db.updateGoal(updatedGoal);
         }
       } catch (e) {
         // ignore: avoid_print
-        print('Updating savings goal failed (trip was still logged fine): $e');
+        print('Updating savings goals failed (trip was still logged fine): $e');
       }
     }
 

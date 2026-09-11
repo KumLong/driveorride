@@ -120,12 +120,14 @@ class SavingsGoalModel {
   final String name;
   final double targetAmount;
   final double savedAmount;
+  final bool celebrated;
 
   SavingsGoalModel({
     this.id,
     required this.name,
     required this.targetAmount,
     this.savedAmount = 0,
+    this.celebrated = false,
   });
 
   double get progressPercent =>
@@ -136,6 +138,7 @@ class SavingsGoalModel {
     name: data['name'],
     targetAmount: (data['targetAmount'] as num).toDouble(),
     savedAmount: (data['savedAmount'] as num).toDouble(),
+    celebrated: (data['celebrated'] as int? ?? 0) == 1,
   );
 
   Map<String, dynamic> toMap() => {
@@ -143,6 +146,7 @@ class SavingsGoalModel {
     'name': name,
     'targetAmount': targetAmount,
     'savedAmount': savedAmount,
+    'celebrated': celebrated ? 1 : 0,
   };
 }
 

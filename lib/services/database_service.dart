@@ -37,7 +37,7 @@ class DatabaseService {
   Future<Database> _initDatabase() async {
     final directory = await getApplicationDocumentsDirectory();
     final path = join(directory.path, 'driveorride.db');
-    return await openDatabase(path, version: 3, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   void _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -50,6 +50,14 @@ class DatabaseService {
       await db.execute("ALTER TABLE saved_locations ADD COLUMN ownerId TEXT DEFAULT 'guest'");
       await db.execute("ALTER TABLE savings_goals ADD COLUMN ownerId TEXT DEFAULT 'guest'");
       await db.execute("ALTER TABLE trip_logs ADD COLUMN ownerId TEXT DEFAULT 'guest'");
+    }
+    if (oldVersion < 4) {
+      // Permanently remembers whether a goal's "Goal Achieved!" popup
+      // has already been shown — fixes the bug where every completed
+      // goal re-showed its celebration popup on every fresh app
+      // launch, since that was previously tracked only in memory
+      // (a static Set that resets every time the app restarts).
+      await db.execute('ALTER TABLE savings_goals ADD COLUMN celebrated INTEGER DEFAULT 0');
     }
   }
 
@@ -69,6 +77,7 @@ class DatabaseService {
           'name TEXT, '
           'targetAmount REAL, '
           'savedAmount REAL DEFAULT 0, '
+          'celebrated INTEGER DEFAULT 0, '
           "ownerId TEXT DEFAULT 'guest')",
     );
     await db.execute(
@@ -137,6 +146,15 @@ class DatabaseService {
     log('GOAL UPDATED');
   }
 
+  // NOTE: syncGoalSavings() was removed — it re-allocated your ENTIRE
+  // lifetime total savings across goals every time this screen loaded,
+  // which meant a brand-new goal could instantly jump to 100% using
+  // savings that existed before it was ever created. Goal progress is
+  // now built correctly instead: each trip credits every currently
+  // ACTIVE goal individually at the moment it completes (see
+  // trip_summary_screen.dart) — so a new goal genuinely starts at
+  // RM0 and only grows from trips completed after its creation.
+
   Future<void> deleteGoal(int id) async {
     final db = await database;
     await db.delete('savings_goals', where: 'id = ? AND ownerId = ?', whereArgs: [id, _ownerId]);
@@ -149,6 +167,34 @@ class DatabaseService {
     final db = await database;
     final data = await db.query('trip_logs', where: 'ownerId = ?', whereArgs: [_ownerId], orderBy: 'createdOn DESC');
     return List.generate(data.length, (i) => TripLogModel.fromJson(data[i]));
+  }
+
+  /// Fills in any trips that exist in Supabase but are MISSING from
+  /// this device's local SQLite — matched by route + exact timestamp
+  /// (the same reliable matching used for delete-syncing), not just
+  /// "is local empty".
+  ///
+  /// This replaces the earlier, simpler version which only ever ran
+  /// when local storage was completely empty — meaning a trip added
+  /// on Device A, then later opening the app on Device B (which
+  /// already has SOME local trips from other testing), would never
+  /// pull in that specific missing trip, since the "empty check"
+  /// wouldn't trigger. This version checks every trip individually,
+  /// so real gaps get filled regardless of what's already there.
+  Future<int> syncMissingTripsFromRemote(List<TripLogModel> remoteTrips) async {
+    final localTrips = await getTrips();
+    final localKeys = localTrips.map((t) => '${t.route}|${t.createdOn}').toSet();
+
+    int addedCount = 0;
+    for (final trip in remoteTrips) {
+      final key = '${trip.route}|${trip.createdOn}';
+      if (!localKeys.contains(key)) {
+        await insertTrip(trip);
+        addedCount++;
+      }
+    }
+    log('SYNCED $addedCount MISSING TRIPS FROM REMOTE');
+    return addedCount;
   }
 
   Future<void> insertTrip(TripLogModel trip) async {
@@ -184,5 +230,17 @@ class DatabaseService {
     final db = await database;
     await db.delete('trip_logs', where: 'ownerId = ?', whereArgs: [_ownerId]);
     log('ALL TRIPS CLEARED FOR CURRENT USER');
+  }
+
+  /// Deletes EVERY local data type for the current account — trips,
+  /// saved locations, and savings goals — used for full account
+  /// deletion. Only ever touches rows tagged with THIS account's
+  /// ownerId, so other accounts' local data is never affected.
+  Future<void> deleteAllLocalDataForCurrentUser() async {
+    final db = await database;
+    await db.delete('trip_logs', where: 'ownerId = ?', whereArgs: [_ownerId]);
+    await db.delete('saved_locations', where: 'ownerId = ?', whereArgs: [_ownerId]);
+    await db.delete('savings_goals', where: 'ownerId = ?', whereArgs: [_ownerId]);
+    log('ALL LOCAL DATA DELETED FOR CURRENT USER');
   }
 }
