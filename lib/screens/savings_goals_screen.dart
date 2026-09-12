@@ -688,7 +688,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
               label: const Text('Set a New Goal',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.teal,
+                backgroundColor: AppColors.mint,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 0,

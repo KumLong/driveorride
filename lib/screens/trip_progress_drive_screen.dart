@@ -38,6 +38,7 @@ class TripProgressDriveScreen extends StatefulWidget {
 class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
   final _locationService = LocationTrackingService();
   LatLng? _currentPosition;
+  LatLng? _startPosition; // captured on the FIRST real GPS reading — the true reference point for measuring real progress
   double _distanceRemainingKm = 0;
   late final double _totalDistanceKm; // fixed at trip start, for the progress bar
 
@@ -58,7 +59,20 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     _locationService.startTracking((loc.LocationData data) {
       if (data.latitude == null || data.longitude == null) return;
       final pos = LatLng(data.latitude!, data.longitude!);
-      final dist = Distance()(pos, widget.destination) / 1000.0;
+
+      // Capture the FIRST real GPS reading as the true starting point —
+      // this is what fixes the bug: measuring distance FROM here
+      // guarantees progress correctly starts at exactly 0, instead of
+      // comparing a straight-line distance-to-destination against a
+      // real road-distance total (which are never the same scale,
+      // since roads are always longer than a straight line — that
+      // mismatch is what made progress appear high before any real
+      // movement happened at all).
+      _startPosition ??= pos;
+
+      final traveledKm = Distance()(_startPosition!, pos) / 1000.0;
+      final dist = (_totalDistanceKm - traveledKm).clamp(0.0, _totalDistanceKm);
+
       if (mounted) {
         setState(() {
           _currentPosition = pos;

@@ -2,17 +2,26 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:location/location.dart' as loc;
 import '../services/gtfs_service.dart';
+import '../services/location_tracking_service.dart';
 import '../main.dart' show gtfsService;
 import '../theme.dart';
 import 'trip_summary_screen.dart';
 
 /// Combines a MultiLegJourney's stops into one flat, live timeline
 /// (with a "Transfer" marker between legs, if any), shows the real
-/// route line on a map, and highlights the current stage by comparing
-/// the phone's real clock against a schedule anchored to when the
-/// trip actually started — built from real travel durations in the
-/// GTFS data, not a live vehicle feed (Malaysia has no public one).
+/// route line on a map, and highlights the current stage using the
+/// PHONE'S REAL GPS POSITION — finding whichever station is currently
+/// closest — rather than purely comparing against the clock. This is
+/// both more accurate for real use (a delayed train no longer shows
+/// the wrong "current" station) and matches Drive mode's demo-ability
+/// (moving the emulator's mock location updates this instantly,
+/// instead of needing to wait for real time to pass).
+///
+/// The displayed arrival TIMES next to each stop remain the real GTFS
+/// schedule (still useful reference info) — only WHICH stop is
+/// highlighted as "current" is now GPS-driven, not clock-driven.
 ///
 /// Visual style now matches TripProgressDriveScreen: a unified stat
 /// row, a progress bar, and a consistent step-list card.
@@ -40,7 +49,26 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
 
   int _activeFlatIndex = 0;
   late List<_FlatStep> _flatSteps;
-  Timer? _liveTimer;
+  final _locationService = LocationTrackingService();
+  LatLng? _currentPosition;
+
+  // The anchor is the "trip start" reference time used to build
+  // _flatSteps. It starts as the real trip-start moment, but gets
+  // CORRECTED whenever GPS confirms which station you're actually at
+  // — shifting every future time to reflect whether you're running
+  // ahead of or behind the original schedule, instead of staying
+  // fixed forever.
+  late DateTime _anchor;
+  Timer? _clockTimer;
+
+  // Tracks which station the schedule was LAST corrected for — GPS
+  // naturally sends repeated readings every few seconds even while
+  // standing still, so without this check, each repeat reading would
+  // reapply another correction based on elapsed time, causing the
+  // schedule to drift later and later purely from sitting at the
+  // same real-world spot, not from any genuine movement at all.
+  int? _lastCorrectedIndex;
+  Duration _liveDelay = Duration.zero;
 
   @override
   void initState() {
@@ -48,19 +76,54 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     // Real walk time to the first station, not a hardcoded guess —
     // this was the bug: a flat 5-minute assumption regardless of
     // whether the real walk was 2 minutes or 20.
-    _flatSteps = _flattenJourney(DateTime.now().add(Duration(minutes: widget.walkToFirstStationMin)));
-    _computeActiveStop();
-    _liveTimer = Timer.periodic(const Duration(seconds: 30), (_) => _computeActiveStop());
+    _anchor = DateTime.now().add(Duration(minutes: widget.walkToFirstStationMin));
+    _flatSteps = _flattenJourney(_anchor);
+    _startTracking();
+
+    // Keeps the schedule advancing automatically over real time,
+    // using whatever the MOST RECENTLY corrected anchor is — this is
+    // what makes it keep moving on its own between GPS corrections,
+    // not just at the moment GPS actually updates.
+    _clockTimer = Timer.periodic(const Duration(seconds: 20), (_) => _updateLiveDelay());
+  }
+
+  Future<void> _startTracking() async {
+    final granted = await _locationService.isPermissionGranted();
+    if (!granted) await _locationService.requestLocationPermission();
+    final gpsOn = await _locationService.requestEnableGps();
+    if (!gpsOn) return;
+
+    _locationService.startTracking((loc.LocationData data) {
+      if (data.latitude == null || data.longitude == null) return;
+      final pos = LatLng(data.latitude!, data.longitude!);
+      if (mounted) {
+        setState(() => _currentPosition = pos);
+        _computeActiveStopFromPosition(pos);
+      }
+    });
   }
 
   @override
   void dispose() {
-    _liveTimer?.cancel();
+    _clockTimer?.cancel();
     super.dispose();
   }
 
   List<_FlatStep> _flattenJourney(DateTime anchor) {
     final steps = <_FlatStep>[];
+
+    // The walk to the first station was already correctly used to
+    // offset all the timing below — this adds it as an actual VISIBLE
+    // step too, matching what Route Details already shows. Previously
+    // the walk time was used silently, but never appeared in this
+    // screen's own list at all.
+    if (widget.journey.legs.isNotEmpty) {
+      steps.add(_FlatStep.walkStep(
+        stationName: widget.journey.legs.first.boardStation.name,
+        time: anchor,
+      ));
+    }
+
     DateTime cursor = anchor;
     for (int legIdx = 0; legIdx < widget.journey.legs.length; legIdx++) {
       final leg = widget.journey.legs[legIdx];
@@ -85,16 +148,75 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return steps;
   }
 
-  void _computeActiveStop() {
+  /// Finds whichever REAL station is currently closest to the phone's
+  /// actual GPS position, then RECALIBRATES the whole schedule so
+  /// that station's time becomes "now" — shifting every other time
+  /// (past and future) by the same amount. This is what corrects for
+  /// running ahead of or behind the original schedule, based on where
+  /// you're actually confirmed to be, instead of blindly trusting the
+  /// original plan forever.
+  ///
+  /// The walk step and transfer markers have no real position of
+  /// their own (position == null), so they're skipped when searching
+  /// for the closest match.
+  void _computeActiveStopFromPosition(LatLng pos) {
     if (!mounted) return;
-    final now = DateTime.now();
-    int active = 0;
+    int closestIndex = 0;
+    double closestDistanceMeters = double.infinity;
+
     for (int i = 0; i < _flatSteps.length; i++) {
       final step = _flatSteps[i];
-      if (step.isTransferMarker || step.time == null) continue;
-      if (now.isAfter(step.time!) || now.isAtSameMomentAs(step.time!)) active = i;
+      if (step.position == null) continue; // skip walk step & transfer markers
+      final distance = Distance()(pos, step.position!);
+      if (distance < closestDistanceMeters) {
+        closestDistanceMeters = distance;
+        closestIndex = i;
+      }
     }
-    setState(() => _activeFlatIndex = active);
+
+    // Only correct the schedule if this is a GENUINELY NEW station
+    // match — otherwise, repeated GPS readings from sitting still at
+    // the same spot would keep reapplying a correction every few
+    // seconds, causing the schedule to drift later purely from time
+    // passing, not from any real movement.
+    if (closestIndex == _lastCorrectedIndex) return;
+    _lastCorrectedIndex = closestIndex;
+
+    final matchedStep = _flatSteps[closestIndex];
+    if (matchedStep.time != null) {
+      // How far ahead of/behind schedule you actually are, right now,
+      // at this confirmed real station.
+      final correction = DateTime.now().difference(matchedStep.time!);
+      final newAnchor = _anchor.add(correction);
+      setState(() {
+        _anchor = newAnchor;
+        _flatSteps = _flattenJourney(newAnchor);
+        _activeFlatIndex = closestIndex;
+        _liveDelay = Duration.zero; // fresh station, any prior lateness is already absorbed into the correction above
+      });
+    } else {
+      setState(() {
+        _activeFlatIndex = closestIndex;
+        _liveDelay = Duration.zero;
+      });
+    }
+  }
+
+  /// Tracks how much LATER than originally expected you've become,
+  /// purely from the real clock ticking while GPS still confirms
+  /// you're at the SAME station — this does NOT advance which
+  /// station is highlighted (that only ever changes via a genuine
+  /// new GPS match, keeping the map and schedule always honestly
+  /// consistent with each other). It only grows the DISPLAYED ETA,
+  /// reflecting real, truthful lateness instead of pretending
+  /// movement is happening that the map doesn't actually show.
+  void _updateLiveDelay() {
+    if (!mounted) return;
+    final activeStep = _flatSteps[_activeFlatIndex];
+    if (activeStep.time == null) return;
+    final overdue = DateTime.now().difference(activeStep.time!);
+    final newDelay = overdue.isNegative ? Duration.zero : overdue;
+    if (newDelay != _liveDelay) setState(() => _liveDelay = newDelay);
   }
 
   double get _progressFraction {
@@ -102,9 +224,16 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return (_activeFlatIndex / (_flatSteps.length - 1)).clamp(0, 1).toDouble();
   }
 
+  /// The real, base scheduled final arrival, PLUS any live delay
+  /// accumulated from sitting at the current station longer than
+  /// expected — this is what makes the displayed ETA honestly get
+  /// worse over time if you're stuck, without pretending you've
+  /// actually moved to a station the map doesn't show you at.
   DateTime? get _finalArrivalTime {
     for (int i = _flatSteps.length - 1; i >= 0; i--) {
-      if (!_flatSteps[i].isTransferMarker && _flatSteps[i].time != null) return _flatSteps[i].time;
+      if (!_flatSteps[i].isTransferMarker && _flatSteps[i].time != null) {
+        return _flatSteps[i].time!.add(_liveDelay);
+      }
     }
     return null;
   }
@@ -219,22 +348,20 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
         child: const Icon(Icons.location_on, color: AppColors.amber, size: 26),
       ));
     }
-    // Real, schedule-based "you should be around here now" marker —
-    // NOT live GPS (no such data exists for Malaysian rail), but a
-    // genuine visualization of the real active station, updating as
-    // the schedule progresses over time.
-    if (_activeFlatIndex < _flatSteps.length) {
-      final activePos = _flatSteps[_activeFlatIndex].position;
-      if (activePos != null) {
-        markers.add(Marker(
-          point: activePos,
-          width: 36, height: 36,
-          child: Container(
-            decoration: BoxDecoration(color: AppColors.mint, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
-            child: const Icon(Icons.schedule, color: Colors.white, size: 16),
-          ),
-        ));
-      }
+    // Real, live GPS position — matches Drive mode's exact marker
+    // style. This replaces the earlier schedule-only marker: since
+    // the active station is now determined FROM this real position
+    // (see _computeActiveStopFromPosition), showing the real dot here
+    // is more meaningful than re-showing the station it matched to.
+    if (_currentPosition != null) {
+      markers.add(Marker(
+        point: _currentPosition!,
+        width: 34, height: 34,
+        child: Container(
+          decoration: BoxDecoration(color: AppColors.mint, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 3)),
+          child: const Icon(Icons.navigation, color: Colors.white, size: 16),
+        ),
+      ));
     }
     return markers;
   }
@@ -341,6 +468,28 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                   child: Column(
                     children: List.generate(_flatSteps.length, (i) {
                       final step = _flatSteps[i];
+                      if (step.isWalkStep) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(children: [
+                            const SizedBox(width: 4),
+                            Icon(Icons.directions_walk, size: 16, color: Colors.grey.shade500),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Walk to ${step.stationName}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
+                                  Text(
+                                    '~${widget.walkToFirstStationMin} min · arrive ${step.time != null ? GtfsService.formatDateTime(_activeFlatIndex == 0 ? step.time!.add(_liveDelay) : step.time!) : ''}',
+                                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ]),
+                        );
+                      }
                       if (step.isTransferMarker) {
                         return Padding(
                           padding: const EdgeInsets.symmetric(vertical: 4),
@@ -354,7 +503,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                       }
                       final isActive = i == _activeFlatIndex;
                       final isPast = i < _activeFlatIndex;
-                      final isFirst = i == 0;
+                      final isFirst = i == 1; // index 0 is now the walk step, handled separately above
                       final isLast = i == _flatSteps.length - 1;
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 2),
@@ -378,7 +527,9 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                                 children: [
                                   Text(step.stationName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: isPast ? Colors.grey : AppColors.teal)),
                                   Text(
-                                    step.time != null ? GtfsService.formatDateTime(step.time!) : '',
+                                    step.time != null
+                                        ? GtfsService.formatDateTime(isPast ? step.time! : step.time!.add(_liveDelay))
+                                        : '',
                                     style: TextStyle(fontSize: 11, color: isPast ? Colors.grey.shade400 : Colors.grey),
                                   ),
                                 ],
@@ -423,7 +574,9 @@ class _FlatStep {
   final String stationName;
   final DateTime? time;
   final bool isTransferMarker;
+  final bool isWalkStep;
   final LatLng? position;
-  _FlatStep({required this.stationName, this.time, this.position}) : isTransferMarker = false;
-  _FlatStep.transferMarker(this.stationName) : time = null, isTransferMarker = true, position = null;
+  _FlatStep({required this.stationName, this.time, this.position}) : isTransferMarker = false, isWalkStep = false;
+  _FlatStep.transferMarker(this.stationName) : time = null, isTransferMarker = true, isWalkStep = false, position = null;
+  _FlatStep.walkStep({required this.stationName, required DateTime this.time}) : isTransferMarker = false, isWalkStep = true, position = null;
 }

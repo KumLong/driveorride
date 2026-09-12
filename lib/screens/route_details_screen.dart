@@ -5,6 +5,7 @@ import '../models/models.dart';
 import '../services/routing_service.dart';
 import '../services/gtfs_service.dart';
 import '../services/fuel_price_service.dart';
+import '../services/fuel_preference_service.dart';
 import '../main.dart' show gtfsService;
 import '../theme.dart';
 import 'confirm_choice_screen.dart';
@@ -23,6 +24,7 @@ class RouteDetailsScreen extends StatefulWidget {
 class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   final _routingService = RoutingService();
   final _fuelService = FuelPriceService();
+  final _fuelPreference = FuelPreferenceService();
   String _mode = 'transit';
   bool _loading = true;
 
@@ -57,7 +59,8 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
 
   Future<void> _load() async {
     final route = await _routingService.getDrivingRoute(widget.origin, widget.destination);
-    final fuelPrice = await _fuelService.getLatestRon95Price();
+    final fuelType = await _fuelPreference.getFuelType();
+    final fuelPrice = await _fuelService.getLatestPrice(fuelType);
     _originStation = gtfsService.findNearestStation(widget.origin);
     _destStation = gtfsService.findNearestStation(widget.destination);
 
