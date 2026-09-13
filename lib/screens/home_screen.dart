@@ -271,33 +271,28 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Container(
               height: _headerHeight,
               width: double.infinity,
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.teal, Color(0xFF025D6A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Positioned(
-                    bottom: 0, left: 0, right: 0,
-                    child: Opacity(
-                      opacity: 0.18,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Container(width: 30, height: 50, color: Colors.white, margin: const EdgeInsets.only(left: 16)),
-                          Container(width: 22, height: 75, color: Colors.white, margin: const EdgeInsets.only(left: 6)),
-                          const Spacer(),
-                          Container(width: 26, height: 85, color: Colors.white),
-                          Container(width: 26, height: 85, color: Colors.white, margin: const EdgeInsets.only(left: 4)),
-                          const Spacer(),
-                          Container(width: 24, height: 60, color: Colors.white, margin: const EdgeInsets.only(right: 16)),
+                  // KL cityscape background image
+                  Image.asset(
+                    'assets/icon/homescreen.png',
+                    fit: BoxFit.cover,
+                  ),
+                  // Dark overlay so text is readable over the image
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.teal.withOpacity(0.72),
+                          const Color(0xFF025D6A).withOpacity(0.72),
                         ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
                     ),
                   ),
+                  // Text content
                   SafeArea(
                     bottom: false,
                     child: Padding(
@@ -316,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 SizedBox(height: 4),
                                 Text(
                                   'Where will your journey take you today?',
-                                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                                  style: TextStyle(fontSize: 12, color: Colors.white),
                                 ),
                               ],
                             ),

@@ -33,7 +33,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _notificationsEnabled = false;
   double _totalSaved = 0;
   int _tripCount = 0;
-  String _fuelType = 'ron95'; // corrected from the real saved preference in _loadFuelType()
+  String _fuelType = 'ron95';
 
   File? _profileImage;
   final _picker = ImagePicker();
@@ -113,7 +113,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onPressed: () async {
                       await _fuelPreference.setFuelType(_fuelType);
                       if (dialogContext.mounted) Navigator.pop(dialogContext);
-                      if (mounted) setState(() {}); // refresh the row's subtitle
+                      if (mounted) setState(() {});
                     },
                     child: const Text('Save'),
                   ),
@@ -283,19 +283,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// Shows a strong confirmation dialog, then — only if confirmed —
-  /// permanently deletes every piece of this account's real data:
-  /// trips (local + remote), saved locations, savings goals, profile
-  /// picture, and the profiles row itself, then logs out.
-  ///
-  /// Honest limitation, explained in the dialog itself: this does NOT
-  /// delete the actual login credential (email/password) — that
-  /// requires Supabase's Admin API and a secret key that must never be
-  /// placed inside a mobile app. What this DOES do is remove every
-  /// real, meaningful piece of personal data, leaving nothing behind.
   void _confirmDeleteAccount() {
     bool deleting = false;
-
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -322,29 +311,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: TextStyle(color: Colors.grey, fontSize: 13),
                 ),
                 const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: deleting ? null : () => Navigator.pop(dialogContext),
-                        child: const Text('Cancel'),
-                      ),
+                Row(children: [
+                  Expanded(child: OutlinedButton(onPressed: deleting ? null : () => Navigator.pop(dialogContext), child: const Text('Cancel'))),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                      onPressed: deleting ? null : () async {
+                        setDialogState(() => deleting = true);
+                        await _performAccountDeletion(dialogContext);
+                      },
+                      child: deleting
+                          ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Text('Delete Account'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
-                        onPressed: deleting ? null : () async {
-                          setDialogState(() => deleting = true);
-                          await _performAccountDeletion(dialogContext);
-                        },
-                        child: deleting
-                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Delete Account'),
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ]),
               ],
             ),
           ),
@@ -356,41 +338,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _performAccountDeletion(BuildContext dialogContext) async {
     try {
       await _db.deleteAllLocalDataForCurrentUser();
-
+      try { await _supabase.deleteAllTrips(); } catch (e) { print(e); }
       try {
-        await _supabase.deleteAllTrips();
-      } catch (e) {
-        // ignore: avoid_print
-        print('Remote trip deletion failed (local deletion still succeeded): $e');
-      }
-
-      try {
-        if (_profileImage != null && await _profileImage!.exists()) {
-          await _profileImage!.delete();
-        }
-      } catch (e) {
-        // ignore: avoid_print
-        print('Profile picture deletion failed: $e');
-      }
-
-      try {
-        await _auth.deleteProfile();
-      } catch (e) {
-        // ignore: avoid_print
-        print('Remote profile deletion failed: $e');
-      }
-
+        if (_profileImage != null && await _profileImage!.exists()) await _profileImage!.delete();
+      } catch (e) { print(e); }
+      try { await _auth.deleteProfile(); } catch (e) { print(e); }
       await _auth.logout();
       if (mounted) {
         Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (_) => const SplashScreen()), (route) => false);
       }
     } catch (e) {
       if (dialogContext.mounted) Navigator.pop(dialogContext);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Something went wrong while deleting your account: $e')),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Something went wrong: $e')));
     }
   }
 
@@ -436,84 +395,103 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: const Color(0xFFF5F6FA),
       body: CustomScrollView(
         slivers: [
-          // ── Header ──────────────────────────────────────────────────
+
+          // ── Header with KL cityscape background ──────────────────
           SliverToBoxAdapter(
-            child: Container(
-              padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 24, 20, 28),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppColors.mint, Color(0xFF025D6A)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: Row(
-                children: [
-                  // Avatar with camera button
-                  Stack(
-                    children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: AppColors.mint,
-                        backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
-                        child: _loading
-                            ? const SizedBox(width: 18, height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : (_profileImage == null
-                            ? Text(_profile?.initials ?? '?',
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22))
-                            : null),
-                      ),
-                      if (!_loading && isLoggedIn)
-                        Positioned(
-                          bottom: 0, right: 0,
-                          child: GestureDetector(
-                            onTap: _changeProfilePicture,
-                            child: Container(
-                              width: 24, height: 24,
-                              decoration: BoxDecoration(
-                                color: AppColors.amber, shape: BoxShape.circle,
-                                border: Border.all(color: AppColors.teal, width: 2),
-                              ),
-                              child: const Icon(Icons.camera_alt, size: 12, color: Colors.white),
-                            ),
-                          ),
-                        ),
-                    ],
+            child: Stack(
+              children: [
+                // KL cityscape image
+                Positioned.fill(
+                  child: Image.asset(
+                    'assets/icon/homescreen.png',
+                    fit: BoxFit.cover,
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 2),
-                        Text(email, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13)),
-                        const SizedBox(height: 10),
-                        if (!_loading && isLoggedIn)
-                          GestureDetector(
-                            onTap: _editProfile,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                              decoration: BoxDecoration(
-                                border: Border.all(color: Colors.white38),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.edit_outlined, color: Colors.white, size: 13),
-                                  SizedBox(width: 4),
-                                  Text('Edit', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
+                ),
+                // Teal overlay for readability
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppColors.mint.withOpacity(0.78),
+                          const Color(0xFF025D6A).withOpacity(0.78),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
                   ),
-                ],
-              ),
+                ),
+                // Content on top
+                Container(
+                  padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 24, 20, 28),
+                  child: Row(
+                    children: [
+                      // Avatar with camera button
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 50,
+                            backgroundColor: AppColors.teal,
+                            backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                            child: _loading
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : (_profileImage == null
+                                ? Text(_profile?.initials ?? '?', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22))
+                                : null),
+                          ),
+                          if (!_loading && isLoggedIn)
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: GestureDetector(
+                                onTap: _changeProfilePicture,
+                                child: Container(
+                                  width: 24, height: 24,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.amber, shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.teal, width: 2),
+                                  ),
+                                  child: const Icon(Icons.camera_alt, size: 12, color: Colors.white),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 2),
+                            Text(email, style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13)),
+                            const SizedBox(height: 10),
+                            if (!_loading && isLoggedIn)
+                              GestureDetector(
+                                onTap: _editProfile,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.white38),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.edit_outlined, color: Colors.white, size: 13),
+                                      SizedBox(width: 4),
+                                      Text('Edit', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
 
@@ -522,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // ── Stats Card ───────────────────────────────────────
+                  // ── Stats Card ──────────────────────────────────────
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                     decoration: BoxDecoration(
@@ -534,8 +512,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       children: [
                         Expanded(
                           child: Column(children: [
-                            Text('$_tripCount',
-                                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.mint)),
+                            Text('$_tripCount', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: AppColors.mint)),
                             const SizedBox(height: 2),
                             const Text('Trips Taken', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
                           ]),
@@ -543,8 +520,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         Container(width: 1, height: 40, color: Colors.grey.shade200),
                         Expanded(
                           child: Column(children: [
-                            Text('RM ${_totalSaved.toStringAsFixed(2)}',
-                                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.mint)),
+                            Text('RM ${_totalSaved.toStringAsFixed(2)}', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.mint)),
                             const SizedBox(height: 2),
                             const Text('Total Savings', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.black)),
                           ]),
@@ -555,7 +531,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 16),
 
-                  // ── Menu Card ────────────────────────────────────────
+                  // ── Menu Card ──────────────────────────────────────
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -564,69 +540,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     child: Column(
                       children: [
-                        _menuRow(
-                          icon: Icons.history_outlined,
-                          label: 'My Trips',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen()))
-                              .then((_) => _loadStats()),
-                        ),
+                        _menuRow(icon: Icons.history_outlined, label: 'My Trips',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TripHistoryScreen())).then((_) => _loadStats())),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.bookmark_outline,
-                          label: 'Saved Locations',
-                          sub: 'Home, Work, and more',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedLocationsScreen())),
-                        ),
+                        _menuRow(icon: Icons.bookmark_outline, label: 'Saved Locations', sub: 'Home, Work, and more',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SavedLocationsScreen()))),
                         _divider(),
                         _menuRow(
                           icon: Icons.notifications_outlined,
                           label: 'Notifications',
                           sub: '7:30 AM on weekdays',
-                          trailing: Transform.scale(
-                            scale: 0.8,
-                            child: Switch(
-                              value: _notificationsEnabled,
-                              activeColor: AppColors.mint,
-                              onChanged: _onToggleNotifications,
-                            ),
-                          ),
+                          trailing: Transform.scale(scale: 0.8, child: Switch(value: _notificationsEnabled, activeColor: AppColors.mint, onChanged: _onToggleNotifications)),
                         ),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.local_gas_station_outlined,
-                          label: 'Fuel Type',
-                          sub: _fuelType.toUpperCase(),
-                          onTap: _showFuelTypeDialog,
-                        ),
+                        _menuRow(icon: Icons.local_gas_station_outlined, label: 'Fuel Type', sub: _fuelType.toUpperCase(), onTap: _showFuelTypeDialog),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.info_outline,
-                          label: 'About DriveOrRide',
-                          sub: 'v1.0.0 · Built for Malaysia',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => const InfoScreen(title: 'About DriveOrRide', sections: AppInfoContent.about))),
-                        ),
+                        _menuRow(icon: Icons.info_outline, label: 'About DriveOrRide', sub: 'v1.0.0 · Built for Malaysia',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'About DriveOrRide', sections: AppInfoContent.about)))),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.description_outlined,
-                          label: 'Terms & Conditions',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => const InfoScreen(title: 'Terms & Conditions', sections: AppInfoContent.terms))),
-                        ),
+                        _menuRow(icon: Icons.description_outlined, label: 'Terms & Conditions',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'Terms & Conditions', sections: AppInfoContent.terms)))),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.privacy_tip_outlined,
-                          label: 'Privacy Policy',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => const InfoScreen(title: 'Privacy Policy', sections: AppInfoContent.privacy))),
-                        ),
+                        _menuRow(icon: Icons.privacy_tip_outlined, label: 'Privacy Policy',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'Privacy Policy', sections: AppInfoContent.privacy)))),
                         _divider(),
-                        _menuRow(
-                          icon: Icons.help_outline,
-                          label: 'Help & Support',
-                          onTap: () => Navigator.push(context, MaterialPageRoute(
-                              builder: (_) => const InfoScreen(title: 'About DriveOrRide', sections: AppInfoContent.about))),
-                        ),
+                        _menuRow(icon: Icons.help_outline, label: 'Help & Support',
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const InfoScreen(title: 'About DriveOrRide', sections: AppInfoContent.about)))),
                         if (isLoggedIn) ...[
                           _divider(),
                           _menuRow(
@@ -644,7 +583,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 20),
 
-                  // ── Log Out / Login Button ────────────────────────────
+                  // ── Log Out / Login ────────────────────────────────
                   if (isLoggedIn)
                     SizedBox(
                       width: double.infinity,
@@ -655,8 +594,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           side: const BorderSide(color: Colors.redAccent),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                         ),
-                        child: const Text('Log Out',
-                            style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
+                        child: const Text('Log Out', style: TextStyle(color: Colors.redAccent, fontSize: 15, fontWeight: FontWeight.bold)),
                       ),
                     )
                   else
@@ -678,8 +616,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
 
                   const SizedBox(height: 16),
-                  const Text('Powered by open mobility data · SDG Goal 9 🇲🇾',
-                      style: TextStyle(fontSize: 10, color: Colors.grey)),
+                  const Text('Powered by open mobility data · SDG Goal 9 🇲🇾', style: TextStyle(fontSize: 10, color: Colors.grey)),
                   const SizedBox(height: 24),
                 ],
               ),
