@@ -6,6 +6,7 @@ import '../services/routing_service.dart';
 import '../services/gtfs_service.dart';
 import '../services/fuel_price_service.dart';
 import '../services/fuel_preference_service.dart';
+import '../services/report_service.dart';
 import '../main.dart' show gtfsService;
 import '../theme.dart';
 import 'confirm_choice_screen.dart';
@@ -25,8 +26,11 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   final _routingService = RoutingService();
   final _fuelService = FuelPriceService();
   final _fuelPreference = FuelPreferenceService();
+  final _reportService = ReportService();
   String _mode = 'transit';
   bool _loading = true;
+  List<RouteReport> _roadReports = [];
+  List<RouteReport> _railReports = [];
 
   List<LatLng> _driveRoutePoints = [];
   double _driveDistanceKm = 0;
@@ -79,6 +83,24 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
       _transitFareEstimate = _journey != null ? _estimateFare(_journey!.totalDistanceKm) : 0;
       _loading = false;
     });
+
+    // Check for relevant, currently-active reports — road matched by
+    // real geographic proximity, rail matched by station name. Doesn't
+    // block the main content from showing while this loads.
+    try {
+      if (_driveRoutePoints.isNotEmpty) {
+        final roadReports = await _reportService.getApprovedRoadReports(_driveRoutePoints);
+        if (mounted) setState(() => _roadReports = roadReports);
+      }
+      if (_journey != null) {
+        final stationNames = _journey!.legs.expand((leg) => [leg.boardStation.name, leg.alightStation.name]).toSet().toList();
+        final railReports = await _reportService.getApprovedRailReports(stationNames);
+        if (mounted) setState(() => _railReports = railReports);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Could not check for active reports: $e');
+    }
   }
 
   List<LatLng> get _transitPolyline {
@@ -193,7 +215,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
-              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice →')),
+              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice')),
             ),
           ),
         ],
@@ -219,6 +241,34 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   /// One unified stat row style shared by Drive and Transit — a single
   /// white card with 2-3 values separated by thin vertical dividers,
   /// matching the cleaner reference layout instead of separate boxes.
+  /// Shows currently-active, reviewer-approved reports relevant to
+  /// this specific route — road reports matched by real proximity,
+  /// rail reports matched by station name. This is deliberately just
+  /// a visible warning, not something that changes the cost/duration
+  /// numbers above — an unverified crowd report shouldn't silently
+  /// alter numbers a user might rely on; it should just inform them.
+  Widget _reportWarningBanner(List<RouteReport> reports) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange.shade200)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const Icon(Icons.report_problem, color: Colors.orange, size: 18),
+            const SizedBox(width: 8),
+            Text('${reports.length} report${reports.length > 1 ? 's' : ''} on this route', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.orange.shade900)),
+          ]),
+          const SizedBox(height: 8),
+          ...reports.take(3).map((r) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text('• ${r.issueType[0].toUpperCase()}${r.issueType.substring(1)}: ${r.description}', style: TextStyle(fontSize: 12, color: Colors.orange.shade800)),
+          )),
+        ],
+      ),
+    );
+  }
+
   Widget _statsRow(List<(String, String)> items) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -282,6 +332,10 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_roadReports.isNotEmpty) ...[
+          _reportWarningBanner(_roadReports),
+          const SizedBox(height: 12),
+        ],
         _statsRow([
           ('Travel time', '${_driveDurationMin.toStringAsFixed(0)} min'),
           ('Distance', '${_driveDistanceKm.toStringAsFixed(1)} km'),
@@ -371,6 +425,10 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (_railReports.isNotEmpty) ...[
+          _reportWarningBanner(_railReports),
+          const SizedBox(height: 12),
+        ],
         _statsRow([
           ('Travel time', '${j.totalDurationMinutes + walkToFirstStationMinutes + _estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination)} min'),
           ('Est. fare', 'RM ${_transitFareEstimate.toStringAsFixed(2)}'),

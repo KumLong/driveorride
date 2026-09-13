@@ -111,6 +111,14 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
             celebrated: goal.celebrated, // preserve — this update must never silently reset it
           );
           await _db.updateGoal(updatedGoal);
+          if (_authService.isLoggedIn) {
+            try {
+              await _supabase.uploadGoal(updatedGoal);
+            } catch (e) {
+              // ignore: avoid_print
+              print('Supabase goal sync failed (local credit still succeeded): $e');
+            }
+          }
         }
       } catch (e) {
         // ignore: avoid_print

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/notification_service.dart';
+import '../services/supabase_service.dart';
+import '../services/auth_service.dart';
 import '../theme.dart';
 
 class SavingsGoalsScreen extends StatefulWidget {
@@ -15,6 +17,8 @@ class SavingsGoalsScreen extends StatefulWidget {
 class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
   final _db = DatabaseService();
   final _notifications = NotificationService();
+  final _supabase = SupabaseService();
+  final _authService = AuthService();
   List<SavingsGoalModel> _goals = [];
   double _totalSaved = 0;
 
@@ -81,13 +85,22 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
         _celebratedIds.add(id);
         // Persist immediately — marks this goal as celebrated for
         // good, not just for the current session.
-        await _db.updateGoal(SavingsGoalModel(
+        final updatedGoal = SavingsGoalModel(
           id: goal.id,
           name: goal.name,
           targetAmount: goal.targetAmount,
           savedAmount: goal.savedAmount,
           celebrated: true,
-        ));
+        );
+        await _db.updateGoal(updatedGoal);
+        if (_authService.isLoggedIn) {
+          try {
+            await _supabase.uploadGoal(updatedGoal);
+          } catch (e) {
+            // ignore: avoid_print
+            print('Supabase goal sync failed (local save still succeeded): $e');
+          }
+        }
         // Delay slightly so screen finishes building first
         Future.delayed(const Duration(milliseconds: 400), () {
           if (mounted) _showCelebration(goal);
@@ -293,13 +306,27 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                       final name = nameCtrl.text.trim();
                       final target = double.tryParse(targetCtrl.text) ?? 0;
                       if (name.isEmpty || target <= 0) return;
+                      final SavingsGoalModel savedGoal;
                       if (existing == null) {
-                        await _db.insertGoal(SavingsGoalModel(name: name, targetAmount: target));
+                        savedGoal = SavingsGoalModel(name: name, targetAmount: target);
+                        await _db.insertGoal(savedGoal);
                       } else {
-                        await _db.updateGoal(SavingsGoalModel(
+                        savedGoal = SavingsGoalModel(
                             id: existing.id, name: name,
                             targetAmount: target, savedAmount: existing.savedAmount,
-                            celebrated: existing.celebrated)); // preserve — editing name/target must never silently reset it
+                            celebrated: existing.celebrated); // preserve — editing name/target must never silently reset it
+                        await _db.updateGoal(savedGoal);
+                      }
+                      // Only sync to Supabase for a REAL logged-in account —
+                      // a guest has no account to ever log back into and
+                      // retrieve synced data from.
+                      if (_authService.isLoggedIn) {
+                        try {
+                          await _supabase.uploadGoal(savedGoal);
+                        } catch (e) {
+                          // ignore: avoid_print
+                          print('Supabase goal sync failed (local save still succeeded): $e');
+                        }
                       }
                       if (ctx.mounted) Navigator.pop(ctx);
                       _refresh();
@@ -369,12 +396,24 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
       ),
     );
     if (confirm == true) {
+      // Look up the name BEFORE deleting locally — needed to also
+      // delete the matching remote row, since goals are matched by
+      // name (not id) between local SQLite and Supabase.
+      final goalName = _goals.firstWhere((g) => g.id == id, orElse: () => SavingsGoalModel(name: '', targetAmount: 0)).name;
       // Cancel any milestone notification for this goal
       await _notifications.cancelGoalNotification(id);
       // Remove from tracking sets so it can re-trigger if user creates a new goal
       _notifiedIds.remove(id);
       _celebratedIds.remove(id);
       await _db.deleteGoal(id);
+      if (_authService.isLoggedIn && goalName.isNotEmpty) {
+        try {
+          await _supabase.deleteGoalByName(goalName);
+        } catch (e) {
+          // ignore: avoid_print
+          print('Supabase goal delete failed (local delete still succeeded): $e');
+        }
+      }
       _refresh();
     }
   }
@@ -688,7 +727,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
               label: const Text('Set a New Goal',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.mint,
+                backgroundColor: AppColors.teal,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 0,

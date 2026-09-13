@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart' as loc;
 import '../services/location_tracking_service.dart';
+import 'report_issue_dialog.dart';
 import '../theme.dart';
 import 'trip_summary_screen.dart';
 
@@ -337,6 +338,21 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
                 SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _onArrived, child: const Text("I've Arrived"))),
                 const SizedBox(height: 8),
                 SizedBox(width: double.infinity, child: OutlinedButton(onPressed: _onStop, child: const Text('Stop Trip'))),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _currentPosition == null ? null : () => showReportIssueDialog(
+                      context,
+                      category: 'road',
+                      latitude: _currentPosition!.latitude,
+                      longitude: _currentPosition!.longitude,
+                    ),
+                    icon: const Icon(Icons.report_problem_outlined, size: 16, color: Colors.orange),
+                    label: const Text('Report an Issue', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold, fontSize: 13)),
+                    style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.orange)),
+                  ),
+                ),
               ],
             ),
           ),

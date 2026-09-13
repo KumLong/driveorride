@@ -8,6 +8,7 @@ import '../services/location_tracking_service.dart';
 import '../models/models.dart';
 import '../theme.dart';
 import 'compare_screen.dart';
+import 'trip_detail_dialog.dart';
 import 'trip_history_screen.dart';
 import 'saved_locations_screen.dart';
 import 'savings_goals_screen.dart';
@@ -68,13 +69,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshRealData() async {
     final total = await _db.getTotalSaved();
-    final trips = await _db.getTrips();
+    final trips = await _db.getTrips(limit: 2);
     final locations = await _db.getLocations();
     final goals = await _db.getGoals();
     if (mounted) {
       setState(() {
         _totalSaved = total;
-        _recentTrips = trips.take(2).toList();
+        _recentTrips = trips;
         _savedLocations = locations;
         _activeGoal = goals.isNotEmpty
             ? goals.firstWhere(
@@ -566,10 +567,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     )
                   else
                     ..._recentTrips.map((trip) => GestureDetector(
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const TripHistoryScreen()),
-                      ).then((_) => _refreshRealData()),
+                      onTap: () => showTripDetailDialog(context, trip),
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),

@@ -5,6 +5,7 @@ import '../services/database_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 import 'main_shell.dart';
+import 'reviewer_home_screen.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 
@@ -56,9 +57,17 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       await _syncMissingTrips();
+      await _syncMissingGoals();
+
+      // Reviewer accounts get their own dedicated dashboard, never
+      // the normal app — a reviewer has no real need for saved
+      // locations, trip history, or savings goals.
+      final profile = await _auth.fetchCurrentProfile();
+      final isReviewer = profile?.isReviewer ?? false;
+
       if (mounted) {
         Navigator.pushAndRemoveUntil(context,
-            MaterialPageRoute(builder: (_) => const MainShell()), (route) => false);
+            MaterialPageRoute(builder: (_) => isReviewer ? const ReviewerHomeScreen() : const MainShell()), (route) => false);
       }
     } on AuthException catch (e) {
       setState(() => _error = _friendlyError(e));
@@ -84,6 +93,18 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       // ignore: avoid_print
       print('Trip sync failed (login still succeeded): $e');
+    }
+  }
+
+  Future<void> _syncMissingGoals() async {
+    try {
+      final remoteGoals = await _supabase.fetchGoals();
+      if (remoteGoals.isNotEmpty) {
+        await _db.syncMissingGoalsFromRemote(remoteGoals);
+      }
+    } catch (e) {
+      // ignore: avoid_print
+      print('Goal sync failed (login still succeeded): $e');
     }
   }
 

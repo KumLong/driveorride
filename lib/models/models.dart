@@ -10,12 +10,14 @@ class ProfileModel {
   final String fullName;
   final String email;
   final String phone;
+  final bool isReviewer;
 
   ProfileModel({
     required this.id,
     required this.fullName,
     required this.email,
     required this.phone,
+    this.isReviewer = false,
   });
 
   factory ProfileModel.fromJson(Map<String, dynamic> data) => ProfileModel(
@@ -23,6 +25,7 @@ class ProfileModel {
     fullName: data['full_name'] ?? '',
     email: data['email'] ?? '',
     phone: data['phone'] ?? '',
+    isReviewer: data['is_reviewer'] ?? false,
   );
 
   /// Initials for the avatar circle, e.g. "Lee Wei Jian" -> "LW"

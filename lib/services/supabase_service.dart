@@ -59,4 +59,43 @@ class SupabaseService {
   Future<void> deleteAllTrips() async {
     await _client.from('trip_logs').delete().eq('ownerId', _ownerId);
   }
+
+  // ───────────── SAVINGS GOALS ─────────────
+  //
+  // Unlike trips (immutable events, matched by route+timestamp),
+  // goals are matched by (ownerId, name) — a goal's savedAmount and
+  // celebrated flag change repeatedly over its lifetime, so this uses
+  // UPSERT: insert if new, update in place if a goal with that name
+  // already exists for this owner. The 'name' UNIQUE constraint on
+  // the real table is what makes this upsert actually work correctly.
+
+  Future<void> uploadGoal(SavingsGoalModel goal) async {
+    await _client.from('savings_goals').upsert({
+      'name': goal.name,
+      'targetAmount': goal.targetAmount,
+      'savedAmount': goal.savedAmount,
+      'celebrated': goal.celebrated ? 1 : 0,
+      'ownerId': _ownerId,
+    }, onConflict: 'ownerId,name');
+  }
+
+  /// Fetches goals belonging ONLY to the current user/guest.
+  Future<List<SavingsGoalModel>> fetchGoals() async {
+    final data = await _client.from('savings_goals').select().eq('ownerId', _ownerId);
+    return (data as List)
+        .map((row) => SavingsGoalModel.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Deletes ONE remote goal, matched by name + the current owner —
+  /// so one account can never affect another's goal, even if the
+  /// name happened to match.
+  Future<void> deleteGoalByName(String name) async {
+    await _client.from('savings_goals').delete().eq('name', name).eq('ownerId', _ownerId);
+  }
+
+  /// Deletes every goal belonging to the CURRENT user/guest only.
+  Future<void> deleteAllGoals() async {
+    await _client.from('savings_goals').delete().eq('ownerId', _ownerId);
+  }
 }

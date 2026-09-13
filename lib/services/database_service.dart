@@ -134,8 +134,8 @@ class DatabaseService {
   Future<void> insertGoal(SavingsGoalModel goal) async {
     final db = await database;
     await db.rawInsert(
-      'INSERT INTO savings_goals(name, targetAmount, savedAmount, ownerId) VALUES(?,?,?,?)',
-      [goal.name, goal.targetAmount, goal.savedAmount, _ownerId],
+      'INSERT INTO savings_goals(name, targetAmount, savedAmount, celebrated, ownerId) VALUES(?,?,?,?,?)',
+      [goal.name, goal.targetAmount, goal.savedAmount, goal.celebrated ? 1 : 0, _ownerId],
     );
     log('GOAL INSERTED');
   }
@@ -161,12 +161,79 @@ class DatabaseService {
     log('GOAL DELETED');
   }
 
+  /// Mirrors syncMissingTripsFromRemote's exact pattern — pulls any
+  /// goal that exists remotely but not locally (matched by NAME,
+  /// since goals are mutable and don't share IDs between local
+  /// SQLite and Supabase the way trips are matched by route+time).
+  Future<int> syncMissingGoalsFromRemote(List<SavingsGoalModel> remoteGoals) async {
+    final localGoals = await getGoals();
+    final localNames = localGoals.map((g) => g.name).toSet();
+
+    int addedCount = 0;
+    for (final goal in remoteGoals) {
+      if (!localNames.contains(goal.name)) {
+        await insertGoal(goal);
+        addedCount++;
+      }
+    }
+    log('SYNCED $addedCount MISSING GOALS FROM REMOTE');
+    return addedCount;
+  }
+
   // ───────────── TRIP LOGS — full CRUD, scoped per user ─────────────
 
-  Future<List<TripLogModel>> getTrips() async {
+  /// [limit]/[offset] let a caller fetch just a page of trips directly
+  /// from SQLite, instead of loading every trip into memory and
+  /// truncating it in Dart afterward — this matters more as trip
+  /// history grows over months of real use, keeping both Home's small
+  /// preview and History's paginated list genuinely efficient.
+  Future<List<TripLogModel>> getTrips({int? limit, int? offset}) async {
     final db = await database;
-    final data = await db.query('trip_logs', where: 'ownerId = ?', whereArgs: [_ownerId], orderBy: 'createdOn DESC');
+    final data = await db.query(
+      'trip_logs',
+      where: 'ownerId = ?',
+      whereArgs: [_ownerId],
+      orderBy: 'createdOn DESC',
+      limit: limit,
+      offset: offset,
+    );
     return List.generate(data.length, (i) => TripLogModel.fromJson(data[i]));
+  }
+
+  /// Real count of this user's total trips — used by History's
+  /// pagination to know when there's nothing more to load.
+  Future<int> getTripCount() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM trip_logs WHERE ownerId = ?', [_ownerId]);
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  /// Real SQL-level SUM, avoiding loading every full trip record just
+  /// to add up one field — used for the CO2-saved calculation, which
+  /// needs the TRUE total across every transit trip, not just
+  /// whatever's currently paginated into view on the History screen.
+  Future<double> getTotalDistanceForMode(String mode) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT SUM(distanceKm) as total FROM trip_logs WHERE ownerId = ? AND mode = ?',
+      [_ownerId, mode],
+    );
+    return (result.first['total'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  /// Lightweight — only the two fields actually needed for the
+  /// savings-over-time chart (not full trip records with every
+  /// field), across the TRUE full history, so the chart accurately
+  /// reflects everything, not just a paginated subset.
+  Future<List<Map<String, dynamic>>> getSavingsTimeline() async {
+    final db = await database;
+    return db.query(
+      'trip_logs',
+      columns: ['createdOn', 'savedVsAlternative'],
+      where: 'ownerId = ?',
+      whereArgs: [_ownerId],
+      orderBy: 'createdOn ASC',
+    );
   }
 
   /// Fills in any trips that exist in Supabase but are MISSING from

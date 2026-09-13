@@ -4,6 +4,7 @@ import 'services/gtfs_service.dart';
 import 'services/auth_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/main_shell.dart';
+import 'screens/reviewer_home_screen.dart';
 import 'theme.dart';
 
 final gtfsService = GtfsService(); // shared instance used across screens
@@ -60,20 +61,39 @@ Future<void> main() async {
 class DriveOrRideApp extends StatelessWidget {
   const DriveOrRideApp({super.key});
 
+  /// Determines where the app should open. Checking is_reviewer
+  /// requires a real database fetch (not just "is a session present"),
+  /// so this whole determination has to be async — reviewer accounts
+  /// land on their own dedicated dashboard, never the normal app.
+  Future<Widget> _determineInitialScreen() async {
+    final auth = AuthService();
+    if (!auth.isLoggedIn) return const SplashScreen();
+
+    try {
+      final profile = await auth.fetchCurrentProfile();
+      if (profile != null && profile.isReviewer) return const ReviewerHomeScreen();
+    } catch (e) {
+      // ignore: avoid_print
+      print('Could not check reviewer status, defaulting to normal app: $e');
+    }
+    return const MainShell();
+  }
+
   @override
   Widget build(BuildContext context) {
-    // If Supabase already has a real, persisted session (the user
-    // logged in previously and never logged out), skip Splash/Login
-    // entirely and go straight to the main app — matching how most
-    // real apps behave. Only show Splash for a genuinely fresh user
-    // or someone who explicitly logged out.
-    final alreadyLoggedIn = AuthService().isLoggedIn;
-
     return MaterialApp(
       title: 'DriveOrRide',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
-      home: alreadyLoggedIn ? const MainShell() : const SplashScreen(),
+      home: FutureBuilder<Widget>(
+        future: _determineInitialScreen(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          }
+          return snapshot.data!;
+        },
+      ),
     );
   }
 }

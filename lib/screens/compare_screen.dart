@@ -255,7 +255,6 @@ class _CompareScreenState extends State<CompareScreen> {
             height: 52,
             child: ElevatedButton.icon(
               onPressed: _goToDetails,
-              icon: const Icon(Icons.arrow_forward, size: 18),
               label: const Text('See Full Details', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             ),
           ),
