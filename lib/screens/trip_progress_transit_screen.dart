@@ -548,12 +548,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                     }),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'The mint marker on the map shows where the schedule says you should be right now — it\'s based on real timing, not live GPS or vehicle tracking (no such public feed exists for Malaysian rail).',
-                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
-                  textAlign: TextAlign.center,
-                ),
               ],
             ),
           ),
