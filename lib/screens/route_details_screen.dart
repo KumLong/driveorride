@@ -93,7 +93,19 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
         if (mounted) setState(() => _roadReports = roadReports);
       }
       if (_journey != null) {
-        final stationNames = _journey!.legs.expand((leg) => [leg.boardStation.name, leg.alightStation.name]).toSet().toList();
+        // Every REAL station the journey actually passes through —
+        // not just the board/alight endpoints of each leg. A report
+        // can be tagged with ANY station along a route (it uses
+        // whichever station was active during a live trip), so
+        // matching only the two endpoints was missing every
+        // intermediate stop in between — exactly why a report at a
+        // middle station never showed up here.
+        final stationNames = _journey!.legs
+            .expand((leg) => leg.intermediateStops)
+            .map((st) => gtfsService.getStationById(st.stopId)?.name)
+            .whereType<String>()
+            .toSet()
+            .toList();
         final railReports = await _reportService.getApprovedRailReports(stationNames);
         if (mounted) setState(() => _railReports = railReports);
       }
@@ -215,7 +227,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
-              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice')),
+              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice →')),
             ),
           ),
         ],

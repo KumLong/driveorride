@@ -42,7 +42,7 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
     final pendingRail = await _reportService.getPendingReports('rail');
     final activeRoad = await _reportService.getActiveApprovedReports('road');
     final activeRail = await _reportService.getActiveApprovedReports('rail');
-    final recentActivity = await _reportService.getRecentActivity();
+    final recentActivity = await _reportService.getRecentActivity(limit: 5);
     if (mounted) {
       setState(() {
         _stats = stats;

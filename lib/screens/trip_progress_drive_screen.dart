@@ -39,16 +39,42 @@ class TripProgressDriveScreen extends StatefulWidget {
 class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
   final _locationService = LocationTrackingService();
   LatLng? _currentPosition;
-  LatLng? _startPosition; // captured on the FIRST real GPS reading — the true reference point for measuring real progress
   double _distanceRemainingKm = 0;
   late final double _totalDistanceKm; // fixed at trip start, for the progress bar
+
+  // Cumulative distance (km) along the REAL route shape, from the
+  // start up to each point — e.g. _cumulativeKm[5] is how far along
+  // the actual road you'd have travelled by the time you reach
+  // routePoints[5]. This is what makes progress correctly follow the
+  // road's real curves and turns, instead of a straight line — a
+  // straight line from start to your current position is almost
+  // always SHORTER than the real road distance (roads curve, a
+  // straight line doesn't), which is exactly why progress used to get
+  // stuck around 70% even standing right at the destination.
+  late final List<double> _cumulativeKm;
 
   @override
   void initState() {
     super.initState();
     _distanceRemainingKm = widget.distanceKm;
     _totalDistanceKm = widget.distanceKm > 0 ? widget.distanceKm : 1; // avoid divide-by-zero
+    _cumulativeKm = _buildCumulativeDistances(widget.routePoints);
     _startTracking();
+  }
+
+  /// Builds the running total distance (km) along the route, one
+  /// entry per point — entry 0 is always 0 (the start), and the last
+  /// entry is the real total road distance.
+  List<double> _buildCumulativeDistances(List<LatLng> points) {
+    final result = <double>[0.0];
+    if (points.isEmpty) return result;
+    final distance = Distance();
+    double running = 0.0;
+    for (int i = 1; i < points.length; i++) {
+      running += distance(points[i - 1], points[i]) / 1000.0;
+      result.add(running);
+    }
+    return result;
   }
 
   Future<void> _startTracking() async {
@@ -61,17 +87,13 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
       if (data.latitude == null || data.longitude == null) return;
       final pos = LatLng(data.latitude!, data.longitude!);
 
-      // Capture the FIRST real GPS reading as the true starting point —
-      // this is what fixes the bug: measuring distance FROM here
-      // guarantees progress correctly starts at exactly 0, instead of
-      // comparing a straight-line distance-to-destination against a
-      // real road-distance total (which are never the same scale,
-      // since roads are always longer than a straight line — that
-      // mismatch is what made progress appear high before any real
-      // movement happened at all).
-      _startPosition ??= pos;
-
-      final traveledKm = Distance()(_startPosition!, pos) / 1000.0;
+      // Finds whichever point on the REAL route is currently
+      // closest to you, then reads off how far along the road that
+      // point actually is — correctly reaching the full total
+      // distance right at the destination, and correctly starting
+      // at 0 right at the origin, since both ends of the route are
+      // real points in this same list.
+      final traveledKm = _distanceTravelledAlongRoute(pos);
       final dist = (_totalDistanceKm - traveledKm).clamp(0.0, _totalDistanceKm);
 
       if (mounted) {
@@ -81,6 +103,26 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
         });
       }
     });
+  }
+
+  /// Finds the point on the real route closest to [pos], and returns
+  /// how far along the actual road that point is — this is the real
+  /// fix: measuring against the road's real shape, not a straight
+  /// line, so it correctly reaches the full distance right at the
+  /// destination and starts at 0 right at the origin.
+  double _distanceTravelledAlongRoute(LatLng pos) {
+    if (widget.routePoints.isEmpty) return 0.0;
+    final distance = Distance();
+    int closestIndex = 0;
+    double closestDistanceMeters = double.infinity;
+    for (int i = 0; i < widget.routePoints.length; i++) {
+      final d = distance(pos, widget.routePoints[i]);
+      if (d < closestDistanceMeters) {
+        closestDistanceMeters = d;
+        closestIndex = i;
+      }
+    }
+    return _cumulativeKm[closestIndex];
   }
 
   @override
