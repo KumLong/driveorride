@@ -37,7 +37,7 @@ class DatabaseService {
   Future<Database> _initDatabase() async {
     final directory = await getApplicationDocumentsDirectory();
     final path = join(directory.path, 'driveorride.db');
-    return await openDatabase(path, version: 4, onCreate: _onCreate, onUpgrade: _onUpgrade);
+    return await openDatabase(path, version: 5, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   void _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -59,9 +59,37 @@ class DatabaseService {
       // (a static Set that resets every time the app restarts).
       await db.execute('ALTER TABLE savings_goals ADD COLUMN celebrated INTEGER DEFAULT 0');
     }
+    if (oldVersion < 5) {
+      await db.execute(
+        "CREATE TABLE IF NOT EXISTS wallet("
+            "ownerId TEXT PRIMARY KEY, "
+            "balance REAL DEFAULT 50.0)",
+      );
+      await db.execute(
+        "CREATE TABLE IF NOT EXISTS wallet_transactions("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "label TEXT, "
+            "amount REAL, "
+            "createdOn DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "ownerId TEXT DEFAULT 'guest')",
+      );
+    }
   }
 
   void _onCreate(Database db, int version) async {
+    await db.execute(
+      "CREATE TABLE wallet("
+          "ownerId TEXT PRIMARY KEY, "
+          "balance REAL DEFAULT 50.0)",
+    );
+    await db.execute(
+      "CREATE TABLE wallet_transactions("
+          "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+          "label TEXT, "
+          "amount REAL, "
+          "createdOn DATETIME DEFAULT CURRENT_TIMESTAMP, "
+          "ownerId TEXT DEFAULT 'guest')",
+    );
     await db.execute(
       'CREATE TABLE saved_locations('
           'id INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -290,6 +318,48 @@ class DatabaseService {
     return trips.fold<double>(0.0, (double sum, t) => sum + t.savedVsAlternative);
   }
 
+  // ───────────── WALLET — balance + transactions, scoped per user ─────────────
+
+  Future<double> getWalletBalance() async {
+    final db = await database;
+    final rows = await db.query('wallet', where: 'ownerId = ?', whereArgs: [_ownerId], limit: 1);
+    if (rows.isEmpty) {
+      await db.insert('wallet', {'ownerId': _ownerId, 'balance': 50.0});
+      return 50.0;
+    }
+    return (rows.first['balance'] as num).toDouble();
+  }
+
+  /// Applies a balance change — positive for top-ups, negative for
+  /// payments. Caller is responsible for checking sufficient funds
+  /// first.
+  Future<void> adjustWalletBalance(double delta) async {
+    final db = await database;
+    final current = await getWalletBalance();
+    await db.update('wallet', {'balance': current + delta}, where: 'ownerId = ?', whereArgs: [_ownerId]);
+    log('WALLET BALANCE UPDATED');
+  }
+
+  Future<List<WalletTransactionModel>> getWalletTransactions() async {
+    final db = await database;
+    final data = await db.query(
+      'wallet_transactions',
+      where: 'ownerId = ?',
+      whereArgs: [_ownerId],
+      orderBy: 'createdOn DESC',
+    );
+    return List.generate(data.length, (i) => WalletTransactionModel.fromJson(data[i]));
+  }
+
+  Future<void> insertWalletTransaction(WalletTransactionModel tx) async {
+    final db = await database;
+    await db.rawInsert(
+      'INSERT INTO wallet_transactions(label, amount, createdOn, ownerId) VALUES(?,?,?,?)',
+      [tx.label, tx.amount, tx.createdOn, _ownerId],
+    );
+    log('WALLET TRANSACTION INSERTED');
+  }
+
   /// Deletes ALL trip logs for the CURRENT user only — used for
   /// testing, so you can reset Track Savings without wiping other
   /// accounts' data.
@@ -300,14 +370,16 @@ class DatabaseService {
   }
 
   /// Deletes EVERY local data type for the current account — trips,
-  /// saved locations, and savings goals — used for full account
-  /// deletion. Only ever touches rows tagged with THIS account's
-  /// ownerId, so other accounts' local data is never affected.
+  /// saved locations, savings goals, and wallet data — used for full
+  /// account deletion. Only ever touches rows tagged with THIS
+  /// account's ownerId, so other accounts' local data is never affected.
   Future<void> deleteAllLocalDataForCurrentUser() async {
     final db = await database;
     await db.delete('trip_logs', where: 'ownerId = ?', whereArgs: [_ownerId]);
     await db.delete('saved_locations', where: 'ownerId = ?', whereArgs: [_ownerId]);
     await db.delete('savings_goals', where: 'ownerId = ?', whereArgs: [_ownerId]);
+    await db.delete('wallet_transactions', where: 'ownerId = ?', whereArgs: [_ownerId]);
+    await db.delete('wallet', where: 'ownerId = ?', whereArgs: [_ownerId]);
     log('ALL LOCAL DATA DELETED FOR CURRENT USER');
   }
 }

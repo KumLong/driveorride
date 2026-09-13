@@ -12,6 +12,7 @@ import 'trip_detail_dialog.dart';
 import 'trip_history_screen.dart';
 import 'saved_locations_screen.dart';
 import 'savings_goals_screen.dart';
+import 'wallet_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -314,6 +315,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                   style: TextStyle(fontSize: 12, color: Colors.white),
                                 ),
                               ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const WalletScreen()),
+                            ).then((_) => _refreshRealData()),
+                            child: Container(
+                              width: 38, height: 38,
+                              margin: const EdgeInsets.only(right: 10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.contactless_outlined, color: Colors.white, size: 20),
                             ),
                           ),
                           GestureDetector(

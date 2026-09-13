@@ -5,10 +5,13 @@ import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart' as loc;
 import '../services/gtfs_service.dart';
 import '../services/location_tracking_service.dart';
+import '../services/database_service.dart';
 import '../main.dart' show gtfsService;
 import 'report_issue_dialog.dart';
 import '../theme.dart';
 import 'trip_summary_screen.dart';
+import 'nfc_pay_screen.dart';
+import 'top_up_screen.dart';
 
 /// Combines a MultiLegJourney's stops into one flat, live timeline
 /// (with a "Transfer" marker between legs, if any), shows the real
@@ -51,6 +54,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
   int _activeFlatIndex = 0;
   late List<_FlatStep> _flatSteps;
   final _locationService = LocationTrackingService();
+  final _db = DatabaseService();
   LatLng? _currentPosition;
 
   // The anchor is the "trip start" reference time used to build
@@ -239,6 +243,35 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return null;
   }
 
+  /// Taps the virtual wallet to pay THIS journey's real fare
+  /// (widget.fare — computed for this specific route, not a fixed
+  /// placeholder amount). Checks balance first and offers a Top Up
+  /// shortcut if it's insufficient, same pattern as WalletScreen.
+  Future<void> _onPayFare() async {
+    final balance = await _db.getWalletBalance();
+    if (balance < widget.fare) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Insufficient balance for this RM ${widget.fare.toStringAsFixed(2)} fare.'),
+          action: SnackBarAction(
+            label: 'Top Up',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TopUpScreen())),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NfcPayScreen(amount: widget.fare, label: 'LRT/MRT Fare'),
+      ),
+    );
+  }
+
   void _onStop() {
     showDialog(
       context: context,
@@ -374,7 +407,16 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('On the Way')),
+      appBar: AppBar(
+        title: const Text('On the Way'),
+        actions: [
+          IconButton(
+            tooltip: 'Pay fare with wallet',
+            icon: const Icon(Icons.contactless_outlined),
+            onPressed: _onPayFare,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           SizedBox(

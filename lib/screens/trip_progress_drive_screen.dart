@@ -3,9 +3,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location/location.dart' as loc;
 import '../services/location_tracking_service.dart';
+import '../services/database_service.dart';
 import 'report_issue_dialog.dart';
 import '../theme.dart';
 import 'trip_summary_screen.dart';
+import 'nfc_pay_screen.dart';
+import 'top_up_screen.dart';
 
 /// Live GPS tracking during a drive — matches Practical 13's location
 /// package pattern. Shows a moving "you are here" dot on the map, a
@@ -38,9 +41,18 @@ class TripProgressDriveScreen extends StatefulWidget {
 
 class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
   final _locationService = LocationTrackingService();
+  final _db = DatabaseService();
   LatLng? _currentPosition;
   double _distanceRemainingKm = 0;
   late final double _totalDistanceKm; // fixed at trip start, for the progress bar
+
+  // Same rate your leader already uses in compare_screen.dart /
+  // route_details_screen.dart (RM0.12/km) — recomputed independently
+  // here, from the distanceKm this screen already receives, so the
+  // wallet can charge the real toll-only amount without needing any
+  // change to those files or an extra parameter threaded through them.
+  static const _tollRatePerKm = 0.12;
+  double get _tollCost => widget.distanceKm * _tollRatePerKm;
 
   // Cumulative distance (km) along the REAL route shape, from the
   // start up to each point — e.g. _cumulativeKm[5] is how far along
@@ -153,6 +165,36 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     return (travelled / _totalDistanceKm).clamp(0, 1).toDouble();
   }
 
+  /// Taps the virtual wallet to pay THIS trip's real TOLL only —
+  /// _tollCost, recomputed from the real distance using your leader's
+  /// existing RM0.12/km rate — not the combined fuel+toll `widget.cost`.
+  /// Checks balance first and offers a Top Up shortcut if it's
+  /// insufficient, same pattern as the transit screen's fare payment.
+  Future<void> _onPayToll() async {
+    final balance = await _db.getWalletBalance();
+    if (balance < _tollCost) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Insufficient balance for this RM ${_tollCost.toStringAsFixed(2)} toll.'),
+          action: SnackBarAction(
+            label: 'Top Up',
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TopUpScreen())),
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => NfcPayScreen(amount: _tollCost, label: 'Toll Payment'),
+      ),
+    );
+  }
+
   void _onStop() {
     showDialog(
       context: context,
@@ -244,7 +286,17 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     final center = _currentPosition ?? (widget.routePoints.isNotEmpty ? widget.routePoints.first : widget.destination);
     return Scaffold(
       backgroundColor: AppColors.bg,
-      appBar: AppBar(title: const Text('On the Way')),
+      appBar: AppBar(
+        title: const Text('On the Way'),
+        actions: [
+          if (_tollCost > 0)
+            IconButton(
+              tooltip: 'Pay toll with wallet',
+              icon: const Icon(Icons.contactless_outlined),
+              onPressed: _onPayToll,
+            ),
+        ],
+      ),
       body: Column(
         children: [
           SizedBox(

@@ -153,6 +153,39 @@ class SavingsGoalModel {
   };
 }
 
+/// A wallet top-up or "payment" (toll / LRT / MRT tap) — stored in
+/// SQLite and synced to Supabase, scoped by ownerId exactly like
+/// trips/goals/locations above. This is a SIMULATED virtual wallet:
+/// balance and transactions are real within the app's own database,
+/// but nothing is sent to any real payment network or transit operator.
+class WalletTransactionModel {
+  final int? id;
+  final String label; // e.g. "LRT/MRT Fare", "Top Up"
+  final double amount; // negative for payments, positive for top-ups
+  final String createdOn;
+
+  WalletTransactionModel({
+    this.id,
+    required this.label,
+    required this.amount,
+    required this.createdOn,
+  });
+
+  factory WalletTransactionModel.fromJson(Map<String, dynamic> data) => WalletTransactionModel(
+    id: data['id'],
+    label: data['label'],
+    amount: (data['amount'] as num).toDouble(),
+    createdOn: data['createdOn'],
+  );
+
+  Map<String, dynamic> toMap() => {
+    if (id != null) 'id': id,
+    'label': label,
+    'amount': amount,
+    'createdOn': createdOn,
+  };
+}
+
 /// A logged trip in the user's history — stored in SQLite. Full CRUD.
 class TripLogModel {
   final int? id;

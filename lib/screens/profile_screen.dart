@@ -339,6 +339,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await _db.deleteAllLocalDataForCurrentUser();
       try { await _supabase.deleteAllTrips(); } catch (e) { print(e); }
+      try { await _supabase.deleteAllWalletTransactions(); } catch (e) { print(e); }
       try {
         if (_profileImage != null && await _profileImage!.exists()) await _profileImage!.delete();
       } catch (e) { print(e); }

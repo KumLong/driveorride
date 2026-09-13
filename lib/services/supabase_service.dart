@@ -98,4 +98,31 @@ class SupabaseService {
   Future<void> deleteAllGoals() async {
     await _client.from('savings_goals').delete().eq('ownerId', _ownerId);
   }
+
+  // ───────────── WALLET — scoped per user, same ownerId pattern ─────────────
+  // ⚠️ SETUP: create `wallet_transactions` table (see README) with an
+  // ownerId TEXT column, matching trip_logs/savings_goals above.
+
+  Future<void> uploadWalletTransaction(WalletTransactionModel tx) async {
+    await _client.from('wallet_transactions').insert({
+      'label': tx.label,
+      'amount': tx.amount,
+      'createdOn': tx.createdOn,
+      'ownerId': _ownerId,
+    });
+  }
+
+  /// Fetches wallet transactions belonging ONLY to the current user/guest.
+  Future<List<WalletTransactionModel>> fetchWalletTransactions() async {
+    final data = await _client.from('wallet_transactions').select().eq('ownerId', _ownerId);
+    return (data as List)
+        .map((row) => WalletTransactionModel.fromJson(row as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Deletes every wallet transaction belonging to the CURRENT
+  /// user/guest only — used by account deletion.
+  Future<void> deleteAllWalletTransactions() async {
+    await _client.from('wallet_transactions').delete().eq('ownerId', _ownerId);
+  }
 }
