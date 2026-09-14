@@ -216,7 +216,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
             padding: const EdgeInsets.all(16),
             child: SizedBox(
               width: double.infinity,
-              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice →')),
+              child: ElevatedButton(onPressed: _canConfirm() ? _onConfirm : null, child: const Text('Confirm My Choice')),
             ),
           ),
         ],
