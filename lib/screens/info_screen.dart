@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 
-/// Reusable scrollable text screen — used for About, Terms & Conditions,
-/// and Privacy Policy so we don't repeat the same layout three times.
-/// Restyled to match the app's card-based visual language, instead of
-/// plain unstyled text on a background.
 class InfoScreen extends StatelessWidget {
   final String title;
   final List<InfoSection> sections;
@@ -65,8 +61,6 @@ class InfoSection {
   const InfoSection({this.heading, required this.body});
 }
 
-/// Static content for the three info pages, kept here so profile_screen.dart
-/// stays focused on layout rather than copy.
 class AppInfoContent {
   static const about = [
     InfoSection(

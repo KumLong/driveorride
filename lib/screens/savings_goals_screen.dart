@@ -22,8 +22,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
   List<SavingsGoalModel> _goals = [];
   double _totalSaved = 0;
 
-  // Static so they persist across widget rebuilds within the same app session
-  // — prevents re-triggering every time user switches to this tab
   static final _celebratedIds = <int>{};
   static final _notifiedIds = <int>{};
 
@@ -70,21 +68,13 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
     final total = await _db.getTotalSaved();
     if (!mounted) return;
 
-    // Check milestones before updating state
     for (final goal in goals) {
       final id = goal.id;
       if (id == null) continue;
 
-      // 100% — show celebration popup. Checks the PERSISTED
-      // goal.celebrated flag (not just the in-memory _celebratedIds
-      // set) — this is what actually fixes the bug where every
-      // already-completed goal re-showed its celebration on every
-      // fresh app launch, since the in-memory set alone resets every
-      // time the app restarts.
       if (goal.progressPercent >= 100 && !goal.celebrated && !_celebratedIds.contains(id)) {
         _celebratedIds.add(id);
-        // Persist immediately — marks this goal as celebrated for
-        // good, not just for the current session.
+
         final updatedGoal = SavingsGoalModel(
           id: goal.id,
           name: goal.name,
@@ -97,23 +87,22 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           try {
             await _supabase.uploadGoal(updatedGoal);
           } catch (e) {
-            // ignore: avoid_print
+
             print('Supabase goal sync failed (local save still succeeded): $e');
           }
         }
-        // Delay slightly so screen finishes building first
+
         Future.delayed(const Duration(milliseconds: 400), () {
           if (mounted) _showCelebration(goal);
         });
       }
 
-      // 80% milestone — send push notification (only once per session per goal)
       if (goal.progressPercent >= 80 &&
           goal.progressPercent < 100 &&
           !_notifiedIds.contains(id)) {
         _notifiedIds.add(id);
         final remaining = goal.targetAmount - goal.savedAmount;
-        // Request permission first — in case user never toggled notifications
+
         final granted = await _notifications.requestPermission();
         if (granted) {
           _notifications.showImmediate(
@@ -143,8 +132,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Trophy — using the app's established mint accent
-              // instead of an inconsistent amber tone
+
               Container(
                 width: 72, height: 72,
                 decoration: BoxDecoration(
@@ -166,8 +154,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                   style: const TextStyle(color: Colors.grey, fontSize: 13)),
               const SizedBox(height: 14),
 
-              // Amount — in its own soft card, matching the app's
-              // stat-card language used elsewhere (Home, Route Details)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -314,17 +300,15 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                         savedGoal = SavingsGoalModel(
                             id: existing.id, name: name,
                             targetAmount: target, savedAmount: existing.savedAmount,
-                            celebrated: existing.celebrated); // preserve — editing name/target must never silently reset it
+                            celebrated: existing.celebrated);
                         await _db.updateGoal(savedGoal);
                       }
-                      // Only sync to Supabase for a REAL logged-in account —
-                      // a guest has no account to ever log back into and
-                      // retrieve synced data from.
+
                       if (_authService.isLoggedIn) {
                         try {
                           await _supabase.uploadGoal(savedGoal);
                         } catch (e) {
-                          // ignore: avoid_print
+
                           print('Supabase goal sync failed (local save still succeeded): $e');
                         }
                       }
@@ -396,13 +380,11 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
       ),
     );
     if (confirm == true) {
-      // Look up the name BEFORE deleting locally — needed to also
-      // delete the matching remote row, since goals are matched by
-      // name (not id) between local SQLite and Supabase.
+
       final goalName = _goals.firstWhere((g) => g.id == id, orElse: () => SavingsGoalModel(name: '', targetAmount: 0)).name;
-      // Cancel any milestone notification for this goal
+
       await _notifications.cancelGoalNotification(id);
-      // Remove from tracking sets so it can re-trigger if user creates a new goal
+
       _notifiedIds.remove(id);
       _celebratedIds.remove(id);
       await _db.deleteGoal(id);
@@ -410,7 +392,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
         try {
           await _supabase.deleteGoalByName(goalName);
         } catch (e) {
-          // ignore: avoid_print
+
           print('Supabase goal delete failed (local delete still succeeded): $e');
         }
       }
@@ -538,20 +520,18 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           onPressed: () => Navigator.pop(context),
         )
             : null,
-        // Left aligned title — matches the rest of the app
+
         title: const Text('Saving Goals',
             style: TextStyle(color: AppColors.teal, fontWeight: FontWeight.bold, fontSize: 20)),
         centerTitle: false,
       ),
 
-      // Fixed "Set a New Goal" button at the bottom — moved into body
       bottomNavigationBar: null,
 
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
         children: [
 
-          // ── Hero Banner ──────────────────────────────────────────
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -574,7 +554,7 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Decorative icon — neutral, no sensitive imagery
+
                 Container(
                   width: 72, height: 72,
                   decoration: BoxDecoration(
@@ -605,7 +585,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Total Savings ────────────────────────────────────────
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
@@ -633,7 +612,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Quick Start Suggestions ──────────────────────────────
           const Text('Suggestions',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.teal)),
           const SizedBox(height: 10),
@@ -677,13 +655,11 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
 
           const SizedBox(height: 20),
 
-          // ── Your Goals Header ────────────────────────────────────
           const Text('Your Goals',
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.teal)),
 
           const SizedBox(height: 10),
 
-          // Active goals only
           if (_goals.where((g) => g.progressPercent < 100).isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 24),
@@ -702,7 +678,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
           else
             ..._goals.where((g) => g.progressPercent < 100).map((goal) => _goalCard(goal)),
 
-          // Completed goals section
           if (_goals.any((g) => g.progressPercent >= 100)) ...[
             const SizedBox(height: 20),
             Row(children: [
@@ -717,7 +692,6 @@ class _SavingsGoalsScreenState extends State<SavingsGoalsScreen> {
 
           const SizedBox(height: 12),
 
-          // ── Set a New Goal Button ────────────────────────────────
           SizedBox(
             width: double.infinity,
             height: 52,

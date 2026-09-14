@@ -2,14 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/report_service.dart';
 import '../theme.dart';
 
-/// Shared "Report an Issue" dialog — called from BOTH Drive and
-/// Transit "On the Way" screens, since that's genuinely the moment
-/// someone would witness a real problem, not earlier during planning.
-///
-/// The category ('road' or 'rail') and location/station are already
-/// known by the calling screen (real GPS position for road, the
-/// currently confirmed active station for rail) — the user only ever
-/// needs to pick an issue type and type a short description.
 Future<void> showReportIssueDialog(
     BuildContext context, {
       required String category,

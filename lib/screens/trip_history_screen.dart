@@ -7,18 +7,6 @@ import '../services/auth_service.dart';
 import '../theme.dart';
 import 'trip_detail_dialog.dart';
 
-/// "Track Savings" screen — matches the reference flow's step 7.
-/// Trip History CRUD, PLUS a real savings-over-time chart, trip count,
-/// and a CO2-saved estimate, all computed from actual logged trips
-/// (not placeholder numbers).
-///
-/// IMPORTANT design note: the displayed trip LIST is paginated (a
-/// growing list can otherwise load an unbounded amount of data into
-/// memory over months of real use), but the STATS (trip count, CO2,
-/// chart) are calculated from separate, lightweight SQL aggregate
-/// queries against the TRUE full history — never from just whatever
-/// page happens to be currently loaded, so they stay accurate no
-/// matter how much of the list has been paged through.
 class TripHistoryScreen extends StatefulWidget {
   const TripHistoryScreen({super.key});
 
@@ -42,9 +30,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   double _co2SavedKg = 0;
   List<FlSpot> _savingsOverTimeSpots = [];
 
-  // Average car CO2 emission factor (kg CO2 per km) — a commonly cited
-  // figure for a typical passenger car. CO2 "saved" is estimated only
-  // for transit trips, using the real distance travelled for that trip.
   static const _carEmissionKgPerKm = 0.171;
 
   @override
@@ -53,8 +38,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     _refreshAll();
   }
 
-  /// Refreshes EVERYTHING — the first page of the list, plus every
-  /// stat, from scratch. Used after any change (add/delete/clear).
   Future<void> _refreshAll() async {
     final firstPage = await _db.getTrips(limit: _pageSize, offset: 0);
     await _loadStats();
@@ -66,9 +49,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     }
   }
 
-  /// Loads the real aggregate stats independently of the paginated
-  /// list — this is what keeps them accurate regardless of how much
-  /// of the list has actually been paged through.
   Future<void> _loadStats() async {
     final total = await _db.getTotalSaved();
     final count = await _db.getTripCount();
@@ -92,9 +72,6 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     }
   }
 
-  /// Fetches the NEXT page and appends it — this is the real
-  /// pagination, only loading more from SQLite when actually asked
-  /// to, instead of the whole history up front.
   Future<void> _loadMore() async {
     if (_loadingMore || !_hasMore) return;
     setState(() => _loadingMore = true);
@@ -114,7 +91,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
       try {
         await _supabase.uploadTrip(trip);
       } catch (e) {
-        // ignore: avoid_print
+
         print('Supabase sync failed (check your URL/key in main.dart): $e');
       }
     }
@@ -122,32 +99,21 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
   }
 
   Future<void> _deleteTrip(TripLogModel trip) async {
-    await _db.deleteTrip(trip.id!); // local
+    await _db.deleteTrip(trip.id!);
     if (_authService.isLoggedIn) {
       try {
-        await _supabase.deleteTripByMatch(trip.route, trip.createdOn); // remote — keeps both in sync
+        await _supabase.deleteTripByMatch(trip.route, trip.createdOn);
       } catch (e) {
-        // ignore: avoid_print
+
         print('Supabase delete failed (local delete still succeeded): $e');
       }
     }
     _refreshAll();
   }
 
-  /// Rounds the chart's top value up to a clean number (e.g. next
-  /// multiple of 5, 10, 20...) so axis labels land on tidy values
-  /// instead of fl_chart auto-picking an interval that overlaps labels
-  /// (which is what caused the "1.26" overlapping "1.00" issue).
-  /// Rounds a value down to a clean number matching the chart's scale
-  /// (nearest 10 for small ranges, 20/50 for larger ones).
   double _roundDownToStep(double value, double step) => (value / step).floor() * step;
   double _roundUpToStep(double value, double step) => (value / step).ceil() * step;
 
-  /// Instead of always starting the Y-axis at RM 0 (which squashes the
-  /// line into a tiny sliver at the top if savings are already large,
-  /// e.g. sitting around RM 140-150), this zooms into the actual range
-  /// of the real data — showing meaningful variation instead of a
-  /// near-flat line.
   double get _chartMinY {
     if (_savingsOverTimeSpots.isEmpty) return 0;
     final minVal = _savingsOverTimeSpots.map((s) => s.y).reduce((a, b) => a < b ? a : b);
@@ -161,7 +127,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
     final maxVal = _savingsOverTimeSpots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
     final step = maxVal <= 50 ? 10.0 : (maxVal <= 200 ? 20.0 : 50.0);
     final rounded = _roundUpToStep(maxVal, step);
-    // Ensure there's always some visible range even if all values are equal.
+
     return rounded <= _chartMinY ? _chartMinY + step : rounded;
   }
 
@@ -235,12 +201,12 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
-              await _db.clearAllTrips(); // local
+              await _db.clearAllTrips();
               if (_authService.isLoggedIn) {
                 try {
-                  await _supabase.deleteAllTrips(); // remote — keeps both in sync, real accounts only
+                  await _supabase.deleteAllTrips();
                 } catch (e) {
-                  // ignore: avoid_print
+
                   print('Supabase clear-all failed (local clear still succeeded): $e');
                 }
               }
@@ -292,9 +258,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              // Uses the TRUE total count from a real SQL count query
-              // — accurate regardless of how much of the list below
-              // has actually been paged through.
+
               Expanded(child: _statCard(Icons.route, 'Trips Taken', '$_totalTripCount', AppColors.mint)),
               const SizedBox(width: 12),
               Expanded(child: _statCard(Icons.eco, 'CO₂ Saved', '${_co2SavedKg.toStringAsFixed(1)} kg', Colors.green)),
@@ -382,9 +346,7 @@ class _TripHistoryScreenState extends State<TripHistoryScreen> {
                 ),
               ),
             )),
-            // Real pagination — only fetches the next batch from
-            // SQLite when actually asked to, keeping memory usage
-            // bounded no matter how many trips accumulate over time.
+
             if (_hasMore)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),

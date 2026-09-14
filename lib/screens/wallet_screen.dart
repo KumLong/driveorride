@@ -6,13 +6,6 @@ import '../services/supabase_service.dart';
 import '../theme.dart';
 import 'top_up_screen.dart';
 
-/// A SIMULATED virtual transit/toll card — balance, top-ups, and
-/// transaction history, all real (stored locally + synced to
-/// Supabase, scoped per account the same way trips/goals are). This
-/// screen is a dashboard only: paying a fare or toll always happens
-/// contextually from the "On the Way" screen during an active trip
-/// (TripProgressTransitScreen / TripProgressDriveScreen), using that
-/// trip's real amount — never a generic, made-up number here.
 class WalletScreen extends StatefulWidget {
   const WalletScreen({super.key});
 
@@ -56,9 +49,6 @@ class _WalletScreenState extends State<WalletScreen> {
     if (success == true) _refresh();
   }
 
-  /// Purely cosmetic — a stable 4-digit "card number" derived from the
-  /// signed-in user, so it looks like a real masked card number without
-  /// storing or exposing any real payment data.
   String get _maskedCardNumber {
     final id = _auth.currentUser?.id ?? _auth.currentUser?.email ?? 'guest';
     final digits = (id.hashCode.abs() % 9000 + 1000).toString();
@@ -79,7 +69,7 @@ class _WalletScreenState extends State<WalletScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            // ── Virtual card ──
+
             Container(
               padding: const EdgeInsets.all(20),
               height: 190,

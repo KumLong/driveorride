@@ -6,11 +6,6 @@ import '../theme.dart';
 import 'splash_screen.dart';
 import 'reviewer_reports_screen.dart';
 
-/// The DEDICATED landing screen for reviewer accounts — genuinely
-/// separate from MainShell, with no access to saved locations,
-/// trips, or savings goals, since a reviewer's role has no real need
-/// for any of that (principle of least privilege — give access to
-/// exactly what a role needs, nothing more).
 class ReviewerHomeScreen extends StatefulWidget {
   const ReviewerHomeScreen({super.key});
 
@@ -85,10 +80,6 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
     return '${diff.inDays} day(s) ago';
   }
 
-  /// Describes what actually happened to a report, and when — a
-  /// resolved report takes priority in the description (it's the
-  /// most recent thing that happened to it), otherwise falls back to
-  /// whether it was approved or rejected.
   (String, IconData, Color, DateTime) _activityDescription(RouteReport report) {
     if (report.resolvedAt != null) {
       return ('Resolved', Icons.check_circle, AppColors.mint, report.resolvedAt!);
@@ -118,10 +109,7 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
               if (_loading)
                 const Padding(padding: EdgeInsets.all(40), child: Center(child: CircularProgressIndicator()))
               else ...[
-                // Two category boxes — now show BOTH pending AND
-                // active counts, so it's clear at a glance whether
-                // something needs review AND whether something is
-                // currently live and showing to real users.
+
                 Row(
                   children: [
                     Expanded(child: _categoryBox(
@@ -145,7 +133,6 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Stats row
                 const Text('TODAY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
                 const SizedBox(height: 8),
                 Row(
@@ -159,11 +146,6 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Real, detailed, currently-active reports — directly
-                // visible here, not buried inside a tab you have to
-                // navigate into. This is what actually shows "is
-                // there something live right now that hasn't been
-                // resolved yet" at a glance, with full details.
                 Row(
                   children: [
                     const Text('ACTIVE NOW', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
@@ -237,8 +219,6 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
 
                 const SizedBox(height: 20),
 
-                // Real activity history — what's actually been
-                // decided recently, not just what's pending or active.
                 const Text('RECENT ACTIVITY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
                 const SizedBox(height: 8),
                 if (_recentActivity.isEmpty)
@@ -323,10 +303,7 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
               const SizedBox(height: 6),
               Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.teal), textAlign: TextAlign.center),
               const SizedBox(height: 8),
-              // Two separate badges — pending (needs a decision) vs
-              // active (already live, currently showing to users) —
-              // these mean genuinely different things and shouldn't
-              // be merged into one ambiguous number.
+
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 4, runSpacing: 4,

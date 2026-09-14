@@ -24,11 +24,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
-  // Name: letters, spaces, hyphens and apostrophes only (no numbers)
   static final _namePattern = RegExp(r"^[a-zA-Z\s\-']+$");
 
-  // Malaysian phone: starts with 01, followed by 8-9 more digits (10-11 total)
-  // Accepts formats: 0123456789, 012-3456789, 012 3456789
   static final _phonePattern = RegExp(r'^01[0-9]{8,9}$');
 
   String? _validateName(String name) {
@@ -39,7 +36,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validatePhone(String raw) {
-    // Strip dashes, spaces, and parentheses before checking
+
     final digits = raw.replaceAll(RegExp(r'[\s\-()]'), '');
     if (digits.isEmpty) return 'Please enter your phone number.';
     if (RegExp(r'[a-zA-Z]').hasMatch(raw)) return 'Phone number cannot contain letters.';
@@ -55,27 +52,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final phone = _phoneCtrl.text.trim();
     final password = _passwordCtrl.text;
 
-    // Name validation — no numbers or special characters
     final nameError = _validateName(fullName);
     if (nameError != null) {
       setState(() => _error = nameError);
       return;
     }
 
-    // Email validation
     if (email.isEmpty || !_emailPattern.hasMatch(email)) {
       setState(() => _error = 'Please enter a valid email address (e.g. you@example.com).');
       return;
     }
 
-    // Phone validation — Malaysian format
     final phoneError = _validatePhone(phone);
     if (phoneError != null) {
       setState(() => _error = phoneError);
       return;
     }
 
-    // Password validation
     if (password.length < 6) {
       setState(() => _error = 'Password must be at least 6 characters.');
       return;
@@ -122,7 +115,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             children: [
               const SizedBox(height: 40),
 
-              // Logo + app name + tagline
               Image.asset('assets/icon/logo.png', width: 80, height: 80),
               const SizedBox(height: 10),
               RichText(
@@ -142,7 +134,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 32),
 
-              // Page title
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Create account',
@@ -157,13 +148,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 24),
 
-              // Name
               _label('Name'),
               const SizedBox(height: 6),
               _field(controller: _fullNameCtrl, hint: 'Your name'),
               const SizedBox(height: 14),
 
-              // Email
               _label('Email'),
               const SizedBox(height: 6),
               _field(
@@ -173,7 +162,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Phone
               _label('Phone'),
               const SizedBox(height: 6),
               _field(
@@ -183,7 +171,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
               const SizedBox(height: 14),
 
-              // Password
               _label('Password'),
               const SizedBox(height: 6),
               _field(
@@ -199,7 +186,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
 
-              // Error
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Container(
@@ -220,7 +206,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 20),
 
-              // Create Account button
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -242,7 +227,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 16),
 
-              // Terms — each link goes to its own screen
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -272,7 +256,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               const SizedBox(height: 16),
 
-              // Already have account
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

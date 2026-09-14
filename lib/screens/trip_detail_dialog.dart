@@ -2,12 +2,6 @@ import 'package:flutter/material.dart';
 import '../models/models.dart';
 import '../theme.dart';
 
-/// Shows full details for a single trip — reused from both Home's
-/// recent trip preview and the full Trip History list, so both
-/// places behave consistently. The genuinely new piece of
-/// information this adds beyond the compact row is the EXACT time
-/// (the row only shows the date), since TripLogModel doesn't carry
-/// much else beyond what's already visible.
 void showTripDetailDialog(BuildContext context, TripLogModel trip) {
   final date = DateTime.tryParse(trip.createdOn);
   String formattedDateTime = trip.createdOn;

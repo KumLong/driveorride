@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Shared design tokens, matching the Figma export's color palette exactly.
 class AppColors {
   static const teal = Color(0xFF013A40);
   static const mint = Color(0xFF02C39A);
@@ -10,8 +9,6 @@ class AppColors {
   static const bg = Color(0xFFF0F7F5);
 }
 
-/// Global app theme — consistent rounded cards, buttons, and AppBar
-/// styling across every screen, matching the Figma design language.
 ThemeData buildAppTheme() {
   return ThemeData(
     useMaterial3: true,

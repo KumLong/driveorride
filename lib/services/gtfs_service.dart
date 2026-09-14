@@ -3,8 +3,6 @@ import 'package:csv/csv.dart';
 import 'package:latlong2/latlong.dart';
 import '../models/models.dart';
 
-/// One leg of a journey — riding a single line from one station to
-/// another, with no transfer in between.
 class JourneyLeg {
   final Station boardStation;
   final Station alightStation;
@@ -29,15 +27,9 @@ class JourneyLeg {
   });
 }
 
-/// A full journey — either 1 leg (same line, no transfer) or 2 legs
-/// (one transfer between two different lines, at a shared station).
 class MultiLegJourney {
   final List<JourneyLeg> legs;
-  /// True if a transfer connection was found but the sample GTFS data
-  /// didn't have a combination where leg 2 genuinely departs after
-  /// leg 1 arrives — meaning the exact times shown may not perfectly
-  /// line up in real life. False for direct (no-transfer) journeys,
-  /// and false when a properly-timed transfer combination was found.
+
   final bool isTimingApproximate;
   MultiLegJourney({required this.legs, this.isTimingApproximate = false});
 
@@ -47,10 +39,6 @@ class MultiLegJourney {
   Station get destStation => legs.last.alightStation;
   int get totalDurationMinutes => legs.fold(0, (sum, l) => sum + l.durationMinutes);
 
-  /// Real distance travelled, computed by summing the straight-line
-  /// distance between each consecutive real station along the journey
-  /// (not a made-up number) — used to estimate fare, since no fare API
-  /// exists (see RouteDetailsScreen for the fare formula).
   double get totalDistanceKm {
     final distance = Distance();
     double total = 0;
@@ -85,19 +73,17 @@ class GtfsService {
         _tripToRoute[t['trip_id'].toString()] = t['route_id']?.toString() ?? '';
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('trips.txt not found — line/transfer lookup will not work: $e');
     }
     try {
       final shapesRaw = await rootBundle.loadString('assets/gtfs/shapes.txt');
       _shapes = _parseCsv(shapesRaw);
     } catch (e) {
-      // ignore: avoid_print
+
       print('shapes.txt not found — map polyline will be empty: $e');
     }
 
-    // Group stop_times by trip once, up front — every journey lookup
-    // below reuses this instead of re-scanning the full list each time.
     for (final st in _stopTimes) {
       _stopsByTrip.putIfAbsent(st.tripId, () => []).add(st);
     }
@@ -117,13 +103,7 @@ class GtfsService {
     }).toList();
   }
 
-  /// Finds the real station nearest to any coordinate — but only if
-  /// it's actually within a reasonable distance. Without this cutoff,
-  /// searching for a destination far outside the Klang Valley rail
-  /// network (e.g. Melaka) would still return the closest KL-area
-  /// station, even if it's 100+ km away — creating a nonsensical
-  /// "journey" that has nothing to do with the real destination.
-  static const _maxReasonableDistanceMeters = 20000; // 20 km
+  static const _maxReasonableDistanceMeters = 20000;
 
   Station? findNearestStation(LatLng point) {
     if (_stations.isEmpty) return null;
@@ -137,7 +117,7 @@ class GtfsService {
         nearest = station;
       }
     }
-    if (bestDist > _maxReasonableDistanceMeters) return null; // too far to be a real match
+    if (bestDist > _maxReasonableDistanceMeters) return null;
     return nearest;
   }
 
@@ -149,10 +129,6 @@ class GtfsService {
     }
   }
 
-  /// Normalizes a station name for comparison across lines — GTFS
-  /// often lists the same physical interchange station under slightly
-  /// different spellings/ids per line (e.g. "Masjid Jamek" vs
-  /// "MASJID JAMEK"), so we match on a cleaned-up name, not stop_id.
   String _normalizeName(String name) => name.trim().toUpperCase();
 
   int _timeDiffMinutes(String start, String end) {
@@ -163,9 +139,6 @@ class GtfsService {
     return toMinutes(end) - toMinutes(start);
   }
 
-  /// Converts a raw GTFS time string ("07:05:00", 24-hour) into a
-  /// friendly display format ("7:05 AM"). GTFS times can technically
-  /// go past 24:00 for trips crossing midnight — handled by wrapping.
   static String formatTime(String rawTime) {
     final parts = rawTime.split(':').map(int.parse).toList();
     int hour24 = parts[0] % 24;
@@ -177,10 +150,6 @@ class GtfsService {
     return '$hour12:$minuteStr $period';
   }
 
-  /// Real minute difference between two raw GTFS times — used to get
-  /// the ACTUAL travel duration between two stops from the schedule
-  /// data, without depending on their absolute clock values lining up
-  /// with "now" or with another trip's times.
   static int minutesBetweenTimes(String t1, String t2) {
     int toMin(String t) {
       final p = t.split(':').map(int.parse).toList();
@@ -189,8 +158,6 @@ class GtfsService {
     return toMin(t2) - toMin(t1);
   }
 
-  /// Formats a real DateTime (not a raw GTFS string) the same way as
-  /// formatTime — used for the "anchored to now" display approach.
   static String formatDateTime(DateTime dt) {
     final period = dt.hour >= 12 ? 'PM' : 'AM';
     int hour12 = dt.hour % 12;
@@ -215,9 +182,6 @@ class GtfsService {
     final boardStation = getStationById(stops[fromIdx].stopId)!;
     final alightStation = getStationById(stops[toIdx].stopId)!;
 
-    // Trim the full line's shape down to just the segment actually
-    // travelled (board -> alight), instead of drawing the entire line
-    // end-to-end — that's what was making the map line look "messy".
     final fullShape = shapeId != null ? _getShapePoints(shapeId) : <LatLng>[];
     final trimmedShape = _trimShapeToSegment(fullShape, LatLng(boardStation.lat, boardStation.lon), LatLng(alightStation.lat, alightStation.lon));
 
@@ -234,9 +198,6 @@ class GtfsService {
     );
   }
 
-  /// Finds the shape points nearest to the board/alight stations and
-  /// returns only the portion of the line between them, in the correct
-  /// direction of travel.
   List<LatLng> _trimShapeToSegment(List<LatLng> fullShape, LatLng boardPoint, LatLng alightPoint) {
     if (fullShape.isEmpty) return [];
     final distance = Distance();
@@ -259,8 +220,7 @@ class GtfsService {
     final start = boardIdx < alightIdx ? boardIdx : alightIdx;
     final end = boardIdx < alightIdx ? alightIdx : boardIdx;
     final segment = fullShape.sublist(start, end + 1);
-    // If the trip runs in the opposite direction to our board->alight
-    // order, reverse it so the polyline still draws start-to-end correctly.
+
     return boardIdx <= alightIdx ? segment : segment.reversed.toList();
   }
 
@@ -274,22 +234,11 @@ class GtfsService {
     return parts[0] * 60 + parts[1];
   }
 
-  /// How "soon" a departure at [depMinutes] is, relative to right now.
-  /// If it's already passed today, treat it as happening tomorrow
-  /// (wrap past midnight) — this always prefers a real upcoming
-  /// departure over a stale one from earlier the same day, matching
-  /// how a real commuter would actually plan a trip "starting now."
   int _minutesUntil(int depMinutes) {
     final nowMin = _currentMinutes();
     return depMinutes >= nowMin ? depMinutes - nowMin : (depMinutes + 1440 - nowMin);
   }
 
-  /// Direct, same-line journey — no transfer needed. Real data, no
-  /// hardcoding: searches every trip for one that stops at both
-  /// stations in the correct order, then picks whichever candidate
-  /// trip has the NEXT real upcoming departure (based on the actual
-  /// current time) — the same way a real commuter would pick "the next
-  /// train," not just whichever trip happens to be listed first.
   JourneyLeg? _findDirectLeg(Station origin, Station destination) {
     MapEntry<String, List<StopTime>>? bestEntry;
     int bestOriginIdx = -1, bestDestIdx = -1, bestWait = 1 << 30;
@@ -314,28 +263,10 @@ class GtfsService {
     return _buildLeg(bestEntry.key, bestEntry.value, bestOriginIdx, bestDestIdx);
   }
 
-  /// Full journey finder: tries a direct (same-line) journey first;
-  /// if none exists, automatically searches for ONE transfer point —
-  /// a station name that appears both on a line reachable from the
-  /// origin AND on a line that reaches the destination. This is
-  /// computed fresh from your real GTFS data every time, not a
-  /// hardcoded list of "known interchanges." Among all valid options,
-  /// it picks the one starting with the next real upcoming departure.
-  ///
-  /// LIMITATION (honest): only searches for journeys needing 0 or 1
-  /// transfer. A trip requiring 2+ transfers won't be found — that
-  /// would need a full journey-planning algorithm (e.g. RAPTOR),
-  /// which is out of scope here.
   MultiLegJourney? findJourney(Station origin, Station destination) {
     final direct = _findDirectLeg(origin, destination);
     if (direct != null) return MultiLegJourney(legs: [direct]);
 
-    // 1-transfer search: for every trip touching the origin, look at
-    // every station further along it; for every trip touching the
-    // destination, look at every station earlier on it. If any two
-    // of those candidate stations share the same name, that's our
-    // transfer point. Collect every valid combination, then pick the
-    // one with the soonest real departure — not just the first found.
     final originCandidates = <MapEntry<String, List<StopTime>>>[];
     final destCandidates = <MapEntry<String, List<StopTime>>>[];
 
@@ -350,10 +281,6 @@ class GtfsService {
     JourneyLeg? bestLeg1, bestLeg2;
     int bestWait = 1 << 30;
 
-    // Fallback trackers: used only if NO chronologically valid
-    // combination exists at all (a real possibility with limited
-    // sample GTFS data) — better to still show a transfer option than
-    // report "no route found" outright.
     JourneyLeg? fallbackLeg1, fallbackLeg2;
     int fallbackWait = 1 << 30;
 
@@ -367,7 +294,7 @@ class GtfsService {
         final candidateName = _normalizeName(candidateStation.name);
 
         for (final dEntry in destCandidates) {
-          if (dEntry.key == oEntry.key) continue; // same trip — would've been a direct match already
+          if (dEntry.key == oEntry.key) continue;
           final dStops = dEntry.value;
           final dIdx = dStops.indexWhere((s) => s.stopId == destination.id);
 
@@ -378,20 +305,12 @@ class GtfsService {
               final depMin = _toMinutesOfDay(oStops[oIdx].departureTime);
               final wait = _minutesUntil(depMin);
 
-              // Always track the best fallback, regardless of timing —
-              // this guarantees the transfer feature still finds
-              // something even if the sample data is too sparse to
-              // have a perfectly-timed combination.
               if (wait < fallbackWait) {
                 fallbackWait = wait;
                 fallbackLeg1 = _buildLeg(oEntry.key, oStops, oIdx, i);
                 fallbackLeg2 = _buildLeg(dEntry.key, dStops, j, dIdx);
               }
 
-              // Separately, prefer a combination where leg 2 genuinely
-              // departs after leg 1 arrives (a small buffer added for
-              // realistically walking between platforms) — used only
-              // if one actually exists in the data.
               const transferBufferMinutes = 2;
               final leg1ArrivalMin = _toMinutesOfDay(oStops[i].arrivalTime);
               final leg2DepartureMin = _toMinutesOfDay(dStops[j].departureTime);
@@ -407,8 +326,6 @@ class GtfsService {
       }
     }
 
-    // Prefer the chronologically correct match; only fall back to the
-    // approximate one if no correctly-timed combination was found.
     bool usedFallback = false;
     if (bestLeg1 == null || bestLeg2 == null) {
       bestLeg1 = fallbackLeg1;
@@ -416,7 +333,7 @@ class GtfsService {
       usedFallback = true;
     }
 
-    if (bestLeg1 == null || bestLeg2 == null) return null; // no 0-transfer or 1-transfer journey found at all
+    if (bestLeg1 == null || bestLeg2 == null) return null;
     return MultiLegJourney(legs: [bestLeg1, bestLeg2], isTimingApproximate: usedFallback);
   }
 

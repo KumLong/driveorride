@@ -38,7 +38,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   double _driveCost = 0;
   double _fuelCost = 0;
   double _tollCost = 0;
-  List<String> _driveSteps = []; // real turn-by-turn from OSRM
+  List<String> _driveSteps = [];
 
   Station? _originStation;
   Station? _destStation;
@@ -84,22 +84,13 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
       _loading = false;
     });
 
-    // Check for relevant, currently-active reports — road matched by
-    // real geographic proximity, rail matched by station name. Doesn't
-    // block the main content from showing while this loads.
     try {
       if (_driveRoutePoints.isNotEmpty) {
         final roadReports = await _reportService.getApprovedRoadReports(_driveRoutePoints);
         if (mounted) setState(() => _roadReports = roadReports);
       }
       if (_journey != null) {
-        // Every REAL station the journey actually passes through —
-        // not just the board/alight endpoints of each leg. A report
-        // can be tagged with ANY station along a route (it uses
-        // whichever station was active during a live trip), so
-        // matching only the two endpoints was missing every
-        // intermediate stop in between — exactly why a report at a
-        // middle station never showed up here.
+
         final stationNames = _journey!.legs
             .expand((leg) => leg.intermediateStops)
             .map((st) => gtfsService.getStationById(st.stopId)?.name)
@@ -110,7 +101,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
         if (mounted) setState(() => _railReports = railReports);
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('Could not check for active reports: $e');
     }
   }
@@ -132,9 +123,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
   }
 
   void _onConfirm() {
-    // Real walking time to/from the actual stations — computed here
-    // (not a guess) so the "On the Way" screen can show an accurate
-    // total time and starting point, instead of a hardcoded constant.
+
     final walkToFirstStationMin = _originStation != null ? _estimateWalkMinutes(widget.origin, LatLng(_originStation!.lat, _originStation!.lon)) : 5;
     final walkFromLastStationMin = _destStation != null ? _estimateWalkMinutes(LatLng(_destStation!.lat, _destStation!.lon), widget.destination) : 5;
 
@@ -165,7 +154,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
         children: [
-          // ── From/To header card ──
+
           Container(
             width: double.infinity,
             color: Colors.white,
@@ -183,7 +172,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
               ],
             ),
           ),
-          // ── Map ──
+
           SizedBox(
             height: 200,
             child: FlutterMap(
@@ -210,7 +199,7 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
               ],
             ),
           ),
-          // ── Mode toggle ──
+
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -250,15 +239,6 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     );
   }
 
-  /// One unified stat row style shared by Drive and Transit — a single
-  /// white card with 2-3 values separated by thin vertical dividers,
-  /// matching the cleaner reference layout instead of separate boxes.
-  /// Shows currently-active, reviewer-approved reports relevant to
-  /// this specific route — road reports matched by real proximity,
-  /// rail reports matched by station name. This is deliberately just
-  /// a visible warning, not something that changes the cost/duration
-  /// numbers above — an unverified crowd report shouldn't silently
-  /// alter numbers a user might rely on; it should just inform them.
   Widget _reportWarningBanner(List<RouteReport> reports) {
     return Container(
       padding: const EdgeInsets.all(12),
@@ -309,8 +289,6 @@ class _RouteDetailsScreenState extends State<RouteDetailsScreen> {
     );
   }
 
-  /// One row of the "Route details" step list — matching the reference's
-  /// vertical timeline style with colored dot icons.
   Widget _stepTile({required bool isFirst, required bool isLast, required String title, String? subtitle}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),

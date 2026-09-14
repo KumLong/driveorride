@@ -12,13 +12,12 @@ class SplashScreen extends StatelessWidget {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Full screen background image
+
           Image.asset(
             'assets/icon/splashscreen.png',
             fit: BoxFit.cover,
           ),
 
-          // Tagline overlaid just below "DriveOrRide" text in the image
           Positioned(
             left: 0, right: 0,
             top: MediaQuery.of(context).size.height * 0.44,
@@ -34,7 +33,6 @@ class SplashScreen extends StatelessWidget {
             ),
           ),
 
-          // Subtle gradient only at the very bottom for button readability
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: Container(
@@ -53,7 +51,6 @@ class SplashScreen extends StatelessWidget {
             ),
           ),
 
-          // Tagline + buttons pinned to bottom
           Positioned(
             left: 0, right: 0, bottom: 0,
             child: SafeArea(
@@ -65,7 +62,6 @@ class SplashScreen extends StatelessWidget {
                   children: [
                     const SizedBox(height: 0),
 
-                    // Get Started button
                     SizedBox(
                       width: double.infinity,
                       height: 52,
@@ -95,7 +91,6 @@ class SplashScreen extends StatelessWidget {
 
                     const SizedBox(height: 12),
 
-                    // Log In
                     TextButton(
                       onPressed: () => Navigator.pushReplacement(
                         context,

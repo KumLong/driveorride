@@ -71,7 +71,7 @@ class _MainShellState extends State<MainShell> {
         child: SafeArea(
           top: false,
           child: SizedBox(
-            height: 72, // was 68 — small extra headroom fixes the 1px overflow
+            height: 72,
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [

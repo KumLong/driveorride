@@ -397,18 +397,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: CustomScrollView(
         slivers: [
 
-          // ── Header with KL cityscape background ──────────────────
           SliverToBoxAdapter(
             child: Stack(
               children: [
-                // KL cityscape image
+
                 Positioned.fill(
                   child: Image.asset(
                     'assets/icon/homescreen.png',
                     fit: BoxFit.cover,
                   ),
                 ),
-                // Teal overlay for readability
+
                 Positioned.fill(
                   child: Container(
                     decoration: BoxDecoration(
@@ -423,12 +422,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                 ),
-                // Content on top
+
                 Container(
                   padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 24, 20, 28),
                   child: Row(
                     children: [
-                      // Avatar with camera button
+
                       Stack(
                         children: [
                           CircleAvatar(
@@ -501,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // ── Stats Card ──────────────────────────────────────
+
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
                     decoration: BoxDecoration(
@@ -532,7 +531,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 16),
 
-                  // ── Menu Card ──────────────────────────────────────
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -584,7 +582,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                   const SizedBox(height: 20),
 
-                  // ── Log Out / Login ────────────────────────────────
                   if (isLoggedIn)
                     SizedBox(
                       width: double.infinity,

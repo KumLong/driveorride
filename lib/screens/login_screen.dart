@@ -45,11 +45,6 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       await _auth.login(email, password);
 
-      // Block this login immediately if the account was previously
-      // deleted — the raw Supabase Auth check itself can't be
-      // prevented from succeeding (that would need an admin key that
-      // must never be in a mobile app), so instead we let it succeed,
-      // detect the deletion right here, and immediately reverse it.
       final wasDeleted = await _auth.checkIfDeletedAndSignOutIfSo();
       if (wasDeleted) {
         setState(() => _error = 'This account has been deleted and can no longer be used.');
@@ -59,9 +54,6 @@ class _LoginScreenState extends State<LoginScreen> {
       await _syncMissingTrips();
       await _syncMissingGoals();
 
-      // Reviewer accounts get their own dedicated dashboard, never
-      // the normal app — a reviewer has no real need for saved
-      // locations, trip history, or savings goals.
       final profile = await _auth.fetchCurrentProfile();
       final isReviewer = profile?.isReviewer ?? false;
 
@@ -78,12 +70,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// Fills in any real trips missing from THIS device's local storage
-  /// by comparing against Supabase — fixes the earlier limitation
-  /// where trips added on one device wouldn't show up on another
-  /// unless local storage started out completely empty. Wrapped in
-  /// try/catch so a sync failure (e.g. no internet right now) never
-  /// blocks the login itself from completing.
   Future<void> _syncMissingTrips() async {
     try {
       final remoteTrips = await _supabase.fetchTrips();
@@ -91,7 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await _db.syncMissingTripsFromRemote(remoteTrips);
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('Trip sync failed (login still succeeded): $e');
     }
   }
@@ -103,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
         await _db.syncMissingGoalsFromRemote(remoteGoals);
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('Goal sync failed (login still succeeded): $e');
     }
   }
@@ -134,7 +120,6 @@ class _LoginScreenState extends State<LoginScreen> {
             children: [
               const SizedBox(height: 48),
 
-              // Logo + app name + tagline
               Image.asset('assets/icon/logo.png', width: 100, height: 100),
               const SizedBox(height: 12),
               RichText(
@@ -154,7 +139,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 40),
 
-              // Email field
               _label('Email'),
               const SizedBox(height: 6),
               _field(
@@ -164,7 +148,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Password field
               _label('Password'),
               const SizedBox(height: 6),
               _field(
@@ -180,7 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              // Forgot password
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
@@ -192,7 +174,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
 
-              // Error message
               if (_error != null) ...[
                 const SizedBox(height: 4),
                 Container(
@@ -213,7 +194,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 8),
 
-              // Log In button
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -235,7 +215,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 24),
 
-              // Don't have account
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -252,7 +231,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
               const SizedBox(height: 12),
 
-              // Skip
               TextButton(
                 onPressed: () => Navigator.pushAndRemoveUntil(context,
                     MaterialPageRoute(builder: (_) => const MainShell()), (route) => false),

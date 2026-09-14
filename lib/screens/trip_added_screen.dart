@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'main_shell.dart';
 
-/// Matches the "Trip Added!" step in the reference flow — a distinct
-/// confirmation that the trip was saved, with quick links to view
-/// savings or return home, separate from the Trip Summary screen.
 class TripAddedScreen extends StatelessWidget {
   final String route;
   final double savedVsAlternative;

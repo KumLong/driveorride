@@ -1,29 +1,10 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/models.dart';
 
-/// Real authentication using Supabase Auth. Handles register, login,
-/// logout, password reset, and session check.
-///
-/// ⚠️ Requires your Supabase project URL/key to be set up in main.dart.
-/// Until then, calling register()/login() will throw a clear error
-/// (caught by the screens) instead of crashing the whole app.
 class AuthService {
-  /// Lazy access to the Supabase client — only touched when an auth
-  /// action is actually attempted, not the moment this class is created.
+
   SupabaseClient get _client => Supabase.instance.client;
 
-  /// Registers a new user with Supabase Auth, then creates the matching
-  /// row in the `profiles` table (full_name, email, phone) — matches the
-  /// `profiles` schema created in the SQL editor.
-  ///
-  /// ⚠️ The `profiles` insert only succeeds while the user has an active
-  /// session (your RLS policy requires auth.uid() = id). If your Supabase
-  /// project has "Confirm email" turned on, signUp() won't return a
-  /// session yet, and this insert will fail — the auth account is still
-  /// created, but the profile row will not be. In that case, either turn
-  /// off "Confirm email" in Supabase (Authentication → Providers → Email)
-  /// for this project, or create the profile row after the user's first
-  /// successful login instead.
   Future<AuthResponse> register(
       String email,
       String password, {
@@ -49,10 +30,6 @@ class AuthService {
 
   Future<void> logout() => _client.auth.signOut();
 
-  /// Sends a real Supabase password-reset email with a working link —
-  /// the user taps it, opens a real webpage (hosted separately, see
-  /// reset-password.html) in their browser, and sets a new password
-  /// there. Verification happens entirely on that page, not in this app.
   Future<void> resetPassword(String email) {
     return _client.auth.resetPasswordForEmail(email);
   }
@@ -61,14 +38,12 @@ class AuthService {
     try {
       return _client.auth.currentUser;
     } catch (_) {
-      return null; // Supabase not configured yet — treat as logged out
+      return null;
     }
   }
 
   bool get isLoggedIn => currentUser != null;
 
-  /// Updates the logged-in user's `profiles` row (full_name, phone) —
-  /// used by the editable Profile screen. Email/id are left untouched.
   Future<void> updateProfile({required String fullName, required String phone}) async {
     final user = currentUser;
     if (user == null) throw Exception('Not logged in');
@@ -78,13 +53,6 @@ class AuthService {
     }).eq('id', user.id);
   }
 
-  /// "Deletes" the logged-in user's profile — but as a SOFT delete
-  /// (marking is_deleted = true and clearing name/phone), not a hard
-  /// row deletion. This is what makes it possible to actually block
-  /// the account from being used again afterward: a fully deleted row
-  /// would leave nothing to check against on the next login attempt.
-  /// Real personal data (name, phone) is still genuinely erased —
-  /// only a bare marker row remains.
   Future<void> deleteProfile() async {
     final user = currentUser;
     if (user == null) throw Exception('Not logged in');
@@ -95,14 +63,6 @@ class AuthService {
     }).eq('id', user.id);
   }
 
-  /// Checks whether the CURRENTLY logged-in account was previously
-  /// deleted — if so, immediately signs them back out. This is what
-  /// actually blocks a "deleted" account from being used again: since
-  /// we can't safely prevent Supabase's own login check from
-  /// succeeding (that requires an admin key that must never be in a
-  /// mobile app), we instead let the login technically succeed, then
-  /// immediately reverse it at the app level the moment we detect the
-  /// account was deleted.
   Future<bool> checkIfDeletedAndSignOutIfSo() async {
     final user = currentUser;
     if (user == null) return false;
@@ -115,15 +75,10 @@ class AuthService {
       }
       return false;
     } catch (e) {
-      return false; // if this check itself fails, don't block a real user's login over it
+      return false;
     }
   }
 
-  /// Fetches the logged-in user's row from the `profiles` table — this is
-  /// what makes the Profile screen show the actual name/phone entered at
-  /// registration, instead of hardcoded placeholder text. Returns null if
-  /// no one is logged in, or if no profile row exists yet (e.g. this
-  /// account registered before the profiles table/insert existed).
   Future<ProfileModel?> fetchCurrentProfile() async {
     final user = currentUser;
     if (user == null) return null;

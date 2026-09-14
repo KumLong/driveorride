@@ -10,16 +10,12 @@ import 'trip_summary_screen.dart';
 import 'nfc_pay_screen.dart';
 import 'top_up_screen.dart';
 
-/// Live GPS tracking during a drive — matches Practical 13's location
-/// package pattern. Shows a moving "you are here" dot on the map, a
-/// real progress bar, a real ETA, and the actual turn-by-turn
-/// directions from OSRM for this specific route.
 class TripProgressDriveScreen extends StatefulWidget {
   final LatLng destination;
   final String routeName;
   final List<LatLng> routePoints;
   final double distanceKm;
-  final double durationMin; // the ORIGINAL planned duration, for ETA calc
+  final double durationMin;
   final List<String> steps;
   final double cost;
   final double savedVsAlternative;
@@ -44,39 +40,22 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
   final _db = DatabaseService();
   LatLng? _currentPosition;
   double _distanceRemainingKm = 0;
-  late final double _totalDistanceKm; // fixed at trip start, for the progress bar
+  late final double _totalDistanceKm;
 
-  // Same rate your leader already uses in compare_screen.dart /
-  // route_details_screen.dart (RM0.12/km) — recomputed independently
-  // here, from the distanceKm this screen already receives, so the
-  // wallet can charge the real toll-only amount without needing any
-  // change to those files or an extra parameter threaded through them.
   static const _tollRatePerKm = 0.12;
   double get _tollCost => widget.distanceKm * _tollRatePerKm;
 
-  // Cumulative distance (km) along the REAL route shape, from the
-  // start up to each point — e.g. _cumulativeKm[5] is how far along
-  // the actual road you'd have travelled by the time you reach
-  // routePoints[5]. This is what makes progress correctly follow the
-  // road's real curves and turns, instead of a straight line — a
-  // straight line from start to your current position is almost
-  // always SHORTER than the real road distance (roads curve, a
-  // straight line doesn't), which is exactly why progress used to get
-  // stuck around 70% even standing right at the destination.
   late final List<double> _cumulativeKm;
 
   @override
   void initState() {
     super.initState();
     _distanceRemainingKm = widget.distanceKm;
-    _totalDistanceKm = widget.distanceKm > 0 ? widget.distanceKm : 1; // avoid divide-by-zero
+    _totalDistanceKm = widget.distanceKm > 0 ? widget.distanceKm : 1;
     _cumulativeKm = _buildCumulativeDistances(widget.routePoints);
     _startTracking();
   }
 
-  /// Builds the running total distance (km) along the route, one
-  /// entry per point — entry 0 is always 0 (the start), and the last
-  /// entry is the real total road distance.
   List<double> _buildCumulativeDistances(List<LatLng> points) {
     final result = <double>[0.0];
     if (points.isEmpty) return result;
@@ -99,12 +78,6 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
       if (data.latitude == null || data.longitude == null) return;
       final pos = LatLng(data.latitude!, data.longitude!);
 
-      // Finds whichever point on the REAL route is currently
-      // closest to you, then reads off how far along the road that
-      // point actually is — correctly reaching the full total
-      // distance right at the destination, and correctly starting
-      // at 0 right at the origin, since both ends of the route are
-      // real points in this same list.
       final traveledKm = _distanceTravelledAlongRoute(pos);
       final dist = (_totalDistanceKm - traveledKm).clamp(0.0, _totalDistanceKm);
 
@@ -117,11 +90,6 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     });
   }
 
-  /// Finds the point on the real route closest to [pos], and returns
-  /// how far along the actual road that point is — this is the real
-  /// fix: measuring against the road's real shape, not a straight
-  /// line, so it correctly reaches the full distance right at the
-  /// destination and starts at 0 right at the origin.
   double _distanceTravelledAlongRoute(LatLng pos) {
     if (widget.routePoints.isEmpty) return 0.0;
     final distance = Distance();
@@ -143,10 +111,6 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     super.dispose();
   }
 
-  /// Real-ish ETA: scales the original planned duration by how much
-  /// distance is actually left, then adds that to the current real
-  /// clock time — e.g. if half the distance remains, assumes roughly
-  /// half the time remains too.
   DateTime get _estimatedArrival {
     final progressRatio = (_distanceRemainingKm / _totalDistanceKm).clamp(0, 1);
     final minutesRemaining = widget.durationMin * progressRatio;
@@ -165,11 +129,6 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
     return (travelled / _totalDistanceKm).clamp(0, 1).toDouble();
   }
 
-  /// Taps the virtual wallet to pay THIS trip's real TOLL only —
-  /// _tollCost, recomputed from the real distance using your leader's
-  /// existing RM0.12/km rate — not the combined fuel+toll `widget.cost`.
-  /// Checks balance first and offers a Top Up shortcut if it's
-  /// insufficient, same pattern as the transit screen's fare payment.
   Future<void> _onPayToll() async {
     final balance = await _db.getWalletBalance();
     if (balance < _tollCost) {
@@ -326,7 +285,7 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // ── Real stat row: distance remaining, ETA, status ──
+
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                   decoration: BoxDecoration(
@@ -360,7 +319,7 @@ class _TripProgressDriveScreenState extends State<TripProgressDriveScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // ── Real progress bar: how much of the route is done ──
+
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),

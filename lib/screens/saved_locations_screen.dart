@@ -3,7 +3,6 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../theme.dart';
 
-/// FULL CRUD — Saved Locations, using SQLite (Practical 9 pattern).
 class SavedLocationsScreen extends StatefulWidget {
   const SavedLocationsScreen({super.key});
 
@@ -40,7 +39,6 @@ class _SavedLocationsScreenState extends State<SavedLocationsScreen> {
     );
   }
 
-  // CREATE / UPDATE — shared dialog form, now matching the app's real dialog style
   void _showLocationForm({SavedLocationModel? existing}) {
     final labelCtrl = TextEditingController(text: existing?.label ?? '');
     final addressCtrl = TextEditingController(text: existing?.address ?? '');
@@ -88,8 +86,7 @@ class _SavedLocationsScreenState extends State<SavedLocationsScreen> {
                         if (labelCtrl.text.isEmpty || addressCtrl.text.isEmpty) return;
 
                         if (existing == null) {
-                          // CREATE — in the full app, geocode the address first
-                          // via RoutingService.geocode() to get real lat/lon.
+
                           await _db.insertLocation(SavedLocationModel(
                             label: labelCtrl.text,
                             address: addressCtrl.text,

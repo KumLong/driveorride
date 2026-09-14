@@ -5,11 +5,6 @@ import '../services/database_service.dart';
 import '../services/supabase_service.dart';
 import '../theme.dart';
 
-/// A SIMULATED "tap to pay" screen, visually modeled on Samsung
-/// Pay/Google Pay's NFC animation. It does not talk to any real card
-/// reader — after a short simulated delay (or a tap), it deducts the
-/// fare locally, then syncs it to Supabase the same way trips do
-/// (local write first, remote best-effort after).
 class NfcPayScreen extends StatefulWidget {
   final double amount;
   final String label;
@@ -32,8 +27,7 @@ class _NfcPayScreenState extends State<NfcPayScreen> with SingleTickerProviderSt
   void initState() {
     super.initState();
     _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    // Simulate the phone being tapped on a reader after a short delay,
-    // same as real NFC behaviour — the person can also tap early.
+
     Timer(const Duration(seconds: 5), _simulateTap);
   }
 
@@ -67,7 +61,7 @@ class _NfcPayScreenState extends State<NfcPayScreen> with SingleTickerProviderSt
     try {
       await _supabase.uploadWalletTransaction(tx);
     } catch (_) {
-      // Offline or table not set up yet — local copy is already saved.
+
     }
 
     if (!mounted) return;

@@ -1,10 +1,5 @@
-// ─────────────────────────────────────────────────────────────
-// Core data models used across the app.
-// ─────────────────────────────────────────────────────────────
 
-/// A user's profile — stored in Supabase's `profiles` table, created at
-/// registration to match `auth.users`. Read-only here (registration writes
-/// it, profile screen just displays it).
+
 class ProfileModel {
   final String id;
   final String fullName;
@@ -28,7 +23,6 @@ class ProfileModel {
     isReviewer: data['is_reviewer'] ?? false,
   );
 
-  /// Initials for the avatar circle, e.g. "Lee Wei Jian" -> "LW"
   String get initials {
     final parts = fullName.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
     if (parts.isEmpty) return '?';
@@ -37,8 +31,6 @@ class ProfileModel {
   }
 }
 
-/// A single transit station, read from the real GTFS stops.txt
-/// (verified from your downloaded gtfs_rapid_rail_kl.zip)
 class Station {
   final String id;
   final String name;
@@ -57,7 +49,6 @@ class Station {
   }
 }
 
-/// A scheduled stop-time entry, read from the real GTFS stop_times.txt
 class StopTime {
   final String tripId;
   final String stopId;
@@ -84,9 +75,8 @@ class StopTime {
   }
 }
 
-/// A saved location (Home, Work, etc.) — stored in SQLite. Full CRUD.
 class SavedLocationModel {
-  final int? id;          // null until saved — SQLite auto-assigns it
+  final int? id;
   final String label;
   final String address;
   final double lat;
@@ -117,7 +107,6 @@ class SavedLocationModel {
   };
 }
 
-/// A savings goal set by the user — stored in SQLite. Full CRUD.
 class SavingsGoalModel {
   final int? id;
   final String name;
@@ -153,15 +142,10 @@ class SavingsGoalModel {
   };
 }
 
-/// A wallet top-up or "payment" (toll / LRT / MRT tap) — stored in
-/// SQLite and synced to Supabase, scoped by ownerId exactly like
-/// trips/goals/locations above. This is a SIMULATED virtual wallet:
-/// balance and transactions are real within the app's own database,
-/// but nothing is sent to any real payment network or transit operator.
 class WalletTransactionModel {
   final int? id;
-  final String label; // e.g. "LRT/MRT Fare", "Top Up"
-  final double amount; // negative for payments, positive for top-ups
+  final String label;
+  final double amount;
   final String createdOn;
 
   WalletTransactionModel({
@@ -186,15 +170,14 @@ class WalletTransactionModel {
   };
 }
 
-/// A logged trip in the user's history — stored in SQLite. Full CRUD.
 class TripLogModel {
   final int? id;
   final String route;
-  final String mode; // "drive" or "transit"
+  final String mode;
   final double cost;
   final double savedVsAlternative;
-  final double distanceKm; // real distance travelled, used for CO2 estimate
-  final String createdOn; // stored as ISO date string
+  final double distanceKm;
+  final String createdOn;
 
   TripLogModel({
     this.id,

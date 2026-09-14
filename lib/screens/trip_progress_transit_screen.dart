@@ -13,22 +13,6 @@ import 'trip_summary_screen.dart';
 import 'nfc_pay_screen.dart';
 import 'top_up_screen.dart';
 
-/// Combines a MultiLegJourney's stops into one flat, live timeline
-/// (with a "Transfer" marker between legs, if any), shows the real
-/// route line on a map, and highlights the current stage using the
-/// PHONE'S REAL GPS POSITION — finding whichever station is currently
-/// closest — rather than purely comparing against the clock. This is
-/// both more accurate for real use (a delayed train no longer shows
-/// the wrong "current" station) and matches Drive mode's demo-ability
-/// (moving the emulator's mock location updates this instantly,
-/// instead of needing to wait for real time to pass).
-///
-/// The displayed arrival TIMES next to each stop remain the real GTFS
-/// schedule (still useful reference info) — only WHICH stop is
-/// highlighted as "current" is now GPS-driven, not clock-driven.
-///
-/// Visual style now matches TripProgressDriveScreen: a unified stat
-/// row, a progress bar, and a consistent step-list card.
 class TripProgressTransitScreen extends StatefulWidget {
   final MultiLegJourney journey;
   final double fare;
@@ -57,38 +41,20 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
   final _db = DatabaseService();
   LatLng? _currentPosition;
 
-  // The anchor is the "trip start" reference time used to build
-  // _flatSteps. It starts as the real trip-start moment, but gets
-  // CORRECTED whenever GPS confirms which station you're actually at
-  // — shifting every future time to reflect whether you're running
-  // ahead of or behind the original schedule, instead of staying
-  // fixed forever.
   late DateTime _anchor;
   Timer? _clockTimer;
 
-  // Tracks which station the schedule was LAST corrected for — GPS
-  // naturally sends repeated readings every few seconds even while
-  // standing still, so without this check, each repeat reading would
-  // reapply another correction based on elapsed time, causing the
-  // schedule to drift later and later purely from sitting at the
-  // same real-world spot, not from any genuine movement at all.
   int? _lastCorrectedIndex;
   Duration _liveDelay = Duration.zero;
 
   @override
   void initState() {
     super.initState();
-    // Real walk time to the first station, not a hardcoded guess —
-    // this was the bug: a flat 5-minute assumption regardless of
-    // whether the real walk was 2 minutes or 20.
+
     _anchor = DateTime.now().add(Duration(minutes: widget.walkToFirstStationMin));
     _flatSteps = _flattenJourney(_anchor);
     _startTracking();
 
-    // Keeps the schedule advancing automatically over real time,
-    // using whatever the MOST RECENTLY corrected anchor is — this is
-    // what makes it keep moving on its own between GPS corrections,
-    // not just at the moment GPS actually updates.
     _clockTimer = Timer.periodic(const Duration(seconds: 20), (_) => _updateLiveDelay());
   }
 
@@ -117,11 +83,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
   List<_FlatStep> _flattenJourney(DateTime anchor) {
     final steps = <_FlatStep>[];
 
-    // The walk to the first station was already correctly used to
-    // offset all the timing below — this adds it as an actual VISIBLE
-    // step too, matching what Route Details already shows. Previously
-    // the walk time was used silently, but never appeared in this
-    // screen's own list at all.
     if (widget.journey.legs.isNotEmpty) {
       steps.add(_FlatStep.walkStep(
         stationName: widget.journey.legs.first.boardStation.name,
@@ -153,17 +114,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return steps;
   }
 
-  /// Finds whichever REAL station is currently closest to the phone's
-  /// actual GPS position, then RECALIBRATES the whole schedule so
-  /// that station's time becomes "now" — shifting every other time
-  /// (past and future) by the same amount. This is what corrects for
-  /// running ahead of or behind the original schedule, based on where
-  /// you're actually confirmed to be, instead of blindly trusting the
-  /// original plan forever.
-  ///
-  /// The walk step and transfer markers have no real position of
-  /// their own (position == null), so they're skipped when searching
-  /// for the closest match.
   void _computeActiveStopFromPosition(LatLng pos) {
     if (!mounted) return;
     int closestIndex = 0;
@@ -171,7 +121,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
 
     for (int i = 0; i < _flatSteps.length; i++) {
       final step = _flatSteps[i];
-      if (step.position == null) continue; // skip walk step & transfer markers
+      if (step.position == null) continue;
       final distance = Distance()(pos, step.position!);
       if (distance < closestDistanceMeters) {
         closestDistanceMeters = distance;
@@ -179,25 +129,19 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
       }
     }
 
-    // Only correct the schedule if this is a GENUINELY NEW station
-    // match — otherwise, repeated GPS readings from sitting still at
-    // the same spot would keep reapplying a correction every few
-    // seconds, causing the schedule to drift later purely from time
-    // passing, not from any real movement.
     if (closestIndex == _lastCorrectedIndex) return;
     _lastCorrectedIndex = closestIndex;
 
     final matchedStep = _flatSteps[closestIndex];
     if (matchedStep.time != null) {
-      // How far ahead of/behind schedule you actually are, right now,
-      // at this confirmed real station.
+
       final correction = DateTime.now().difference(matchedStep.time!);
       final newAnchor = _anchor.add(correction);
       setState(() {
         _anchor = newAnchor;
         _flatSteps = _flattenJourney(newAnchor);
         _activeFlatIndex = closestIndex;
-        _liveDelay = Duration.zero; // fresh station, any prior lateness is already absorbed into the correction above
+        _liveDelay = Duration.zero;
       });
     } else {
       setState(() {
@@ -207,14 +151,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     }
   }
 
-  /// Tracks how much LATER than originally expected you've become,
-  /// purely from the real clock ticking while GPS still confirms
-  /// you're at the SAME station — this does NOT advance which
-  /// station is highlighted (that only ever changes via a genuine
-  /// new GPS match, keeping the map and schedule always honestly
-  /// consistent with each other). It only grows the DISPLAYED ETA,
-  /// reflecting real, truthful lateness instead of pretending
-  /// movement is happening that the map doesn't actually show.
   void _updateLiveDelay() {
     if (!mounted) return;
     final activeStep = _flatSteps[_activeFlatIndex];
@@ -229,11 +165,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return (_activeFlatIndex / (_flatSteps.length - 1)).clamp(0, 1).toDouble();
   }
 
-  /// The real, base scheduled final arrival, PLUS any live delay
-  /// accumulated from sitting at the current station longer than
-  /// expected — this is what makes the displayed ETA honestly get
-  /// worse over time if you're stuck, without pretending you've
-  /// actually moved to a station the map doesn't show you at.
   DateTime? get _finalArrivalTime {
     for (int i = _flatSteps.length - 1; i >= 0; i--) {
       if (!_flatSteps[i].isTransferMarker && _flatSteps[i].time != null) {
@@ -243,10 +174,6 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
     return null;
   }
 
-  /// Taps the virtual wallet to pay THIS journey's real fare
-  /// (widget.fare — computed for this specific route, not a fixed
-  /// placeholder amount). Checks balance first and offers a Top Up
-  /// shortcut if it's insufficient, same pattern as WalletScreen.
   Future<void> _onPayFare() async {
     final balance = await _db.getWalletBalance();
     if (balance < widget.fare) {
@@ -382,11 +309,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
         child: const Icon(Icons.location_on, color: AppColors.amber, size: 26),
       ));
     }
-    // Real, live GPS position — matches Drive mode's exact marker
-    // style. This replaces the earlier schedule-only marker: since
-    // the active station is now determined FROM this real position
-    // (see _computeActiveStopFromPosition), showing the real dot here
-    // is more meaningful than re-showing the station it matched to.
+
     if (_currentPosition != null) {
       markers.add(Marker(
         point: _currentPosition!,
@@ -434,7 +357,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // ── Unified stat row — same visual style as Drive ──
+
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
                   decoration: BoxDecoration(
@@ -468,7 +391,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // ── Progress bar — same visual style as Drive ──
+
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
@@ -546,7 +469,7 @@ class _TripProgressTransitScreenState extends State<TripProgressTransitScreen> {
                       }
                       final isActive = i == _activeFlatIndex;
                       final isPast = i < _activeFlatIndex;
-                      final isFirst = i == 1; // index 0 is now the walk step, handled separately above
+                      final isFirst = i == 1;
                       final isLast = i == _flatSteps.length - 1;
                       return Container(
                         margin: const EdgeInsets.symmetric(vertical: 2),

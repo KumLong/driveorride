@@ -39,9 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
   static const double _headerHeight = 170;
   static const double _cardTopMargin = 130;
 
-  /// Same icon-matching logic as Savings Goals screen — kept
-  /// identical so a goal always shows the same icon everywhere in
-  /// the app, not a generic one here and a matched one there.
   IconData _goalIcon(String name) {
     final n = name.toLowerCase();
     if (n.contains('holiday') || n.contains('travel') || n.contains('trip') || n.contains('vacation')) return Icons.flight_takeoff_rounded;
@@ -96,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await _locationService.requestLocationPermission();
       final grantedNow = await _locationService.isPermissionGranted();
       if (!grantedNow) {
-        if (mounted) setState(() => _locating = false); // fixed: mounted check added
+        if (mounted) setState(() => _locating = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -110,7 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final gpsOn = await _locationService.requestEnableGps();
     if (!gpsOn) {
-      if (mounted) setState(() => _locating = false); // fixed: mounted check added
+      if (mounted) setState(() => _locating = false);
       return;
     }
 
@@ -121,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final lng = data.longitude;
 
       if (lat == null || lng == null) {
-        if (mounted) setState(() => _locating = false); // fixed: mounted check added
+        if (mounted) setState(() => _locating = false);
         return;
       }
 
@@ -275,12 +272,12 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // KL cityscape background image
+
                   Image.asset(
                     'assets/icon/homescreen.png',
                     fit: BoxFit.cover,
                   ),
-                  // Dark overlay so text is readable over the image
+
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -293,7 +290,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  // Text content
+
                   SafeArea(
                     bottom: false,
                     child: Padding(
@@ -370,7 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Column(
                       children: [
-                        // FROM field — tap the left icon to re-detect location
+
                         _fieldRow(
                           icon: Icons.my_location,
                           iconBg: AppColors.mintLight,
@@ -402,7 +399,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
 
-                        // TO field — unchanged
                         _fieldRow(
                           icon: Icons.location_on_outlined,
                           iconBg: AppColors.amberLight,

@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import '../theme.dart';
 import 'touch_n_go_payment_screen.dart';
 
-/// Step 1 of topping up the wallet: pick a preset amount or type a
-/// custom one, then continue to the (simulated) Touch & Go payment step.
 class TopUpScreen extends StatefulWidget {
   const TopUpScreen({super.key});
 
@@ -31,9 +29,6 @@ class _TopUpScreenState extends State<TopUpScreen> {
     return (v != null && v >= _minimumTopUp) ? v : null;
   }
 
-  /// Only shown once the person has typed something invalid — stays
-  /// quiet while the field is empty or they're still mid-typing a
-  /// value that could still become valid.
   String? get _customAmountError {
     final text = _customCtrl.text.trim();
     if (text.isEmpty) return null;

@@ -2,20 +2,12 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 
-/// Turns typed addresses into coordinates (Nominatim) and calculates
-/// real driving routes between them (OSRM). Both free, no API key.
 class RoutingService {
-  /// Tries to geocode the place name. If the first attempt (restricted
-  /// strictly to Malaysia + exact query) finds nothing, retries with a
-  /// looser query — this fixes many "place not found" cases where the
-  /// user typed a shorter/partial name (e.g. "Sunway Pyramid" without
-  /// "Selangor, Malaysia" appended).
+
   Future<LatLng?> geocode(String placeName) async {
     final direct = await _tryGeocode(placeName);
     if (direct != null) return direct;
 
-    // Retry once with ", Malaysia" appended, in case the bare name
-    // alone matched something in the wrong country or nothing at all.
     if (!placeName.toLowerCase().contains('malaysia')) {
       final retry = await _tryGeocode('$placeName, Malaysia');
       if (retry != null) return retry;
@@ -40,7 +32,7 @@ class RoutingService {
         }
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('Geocode error for "$query": $e');
     }
     return null;
@@ -71,33 +63,21 @@ class RoutingService {
         }
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('OSRM routing failed, falling back to straight-line estimate: $e');
     }
 
-    // FALLBACK: if OSRM's free server fails or times out (it can, being
-    // a shared public service), estimate using straight-line distance
-    // instead of silently returning null/zero. This is a rougher
-    // number — real road distance is always longer than straight-line —
-    // so it's scaled up slightly (×1.3, a common rule-of-thumb factor
-    // for urban road networks) to be more realistic than a bare
-    // straight line, and clearly still real coordinates, not invented.
     final straightLineKm = Distance()(origin, destination) / 1000.0;
     final estimatedRoadKm = straightLineKm * 1.3;
-    const avgSpeedKmh = 40.0; // reasonable urban driving average
+    const avgSpeedKmh = 40.0;
     return DrivingRoute(
       distanceKm: estimatedRoadKm,
       durationMinutes: (estimatedRoadKm / avgSpeedKmh) * 60,
-      routePoints: [origin, destination], // straight line, since we have no real route geometry
-      steps: [], // no turn-by-turn available for the straight-line fallback
+      routePoints: [origin, destination],
+      steps: [],
     );
   }
 
-  /// Converts OSRM's real turn-by-turn maneuver data into short, human
-  /// readable directions — e.g. "Take LDP (MEX) via Federal Highway".
-  /// This is genuine data from OSRM's response, not invented text —
-  /// only the phrasing/wording is generated here from the real
-  /// maneuver type, road name, and route reference OSRM provides.
   List<String> _parseSteps(Map<String, dynamic> route) {
     final steps = <String>[];
     try {
@@ -145,7 +125,7 @@ class RoutingService {
         }
       }
     } catch (e) {
-      // ignore: avoid_print
+
       print('Could not parse OSRM steps (route still works without them): $e');
     }
     return steps;
@@ -156,7 +136,7 @@ class DrivingRoute {
   final double distanceKm;
   final double durationMinutes;
   final List<LatLng> routePoints;
-  final List<String> steps; // real turn-by-turn directions from OSRM
+  final List<String> steps;
 
   DrivingRoute({required this.distanceKm, required this.durationMinutes, required this.routePoints, this.steps = const []});
 }

@@ -5,10 +5,6 @@ import '../theme.dart';
 import 'trip_progress_drive_screen.dart';
 import 'trip_progress_transit_screen.dart';
 
-/// Matches the reference flow's step 4 ("Choose Option") — a dedicated
-/// screen letting the user pick between Drive and Public Transport one
-/// more time, seeing both real calculated costs side by side, before
-/// the trip actually starts.
 class ConfirmChoiceScreen extends StatefulWidget {
   final LatLng destination;
   final String originName;
@@ -44,7 +40,7 @@ class ConfirmChoiceScreen extends StatefulWidget {
 }
 
 class _ConfirmChoiceScreenState extends State<ConfirmChoiceScreen> {
-  String? _selected; // 'drive' or 'transit'
+  String? _selected;
 
   double get _savedIfTransit => (widget.driveCost - widget.transitFare).clamp(0, double.infinity).toDouble();
 

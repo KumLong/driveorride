@@ -2,11 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../theme.dart';
 
-/// Sends a real, working password-reset link — the user taps it and
-/// completes the reset on a separate webpage (see reset-password.html),
-/// since Supabase's free-tier email template can't be customised to
-/// show an in-app code instead (a real platform restriction, not a
-/// choice made here).
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -51,7 +46,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             children: [
               const SizedBox(height: 40),
 
-              // Logo + app name + tagline
               Image.asset('assets/icon/logo.png', width: 100, height: 100),
               const SizedBox(height: 10),
               RichText(
@@ -69,7 +63,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
               const SizedBox(height: 32),
 
-              // Page title
               const Align(
                 alignment: Alignment.centerLeft,
                 child: Text('Reset password',
@@ -136,7 +129,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                   ),
                 ),
 
-              // Check inbox info box — shown after the link is sent
               if (_linkSent) ...[
                 Container(
                   padding: const EdgeInsets.all(14),

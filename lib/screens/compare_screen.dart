@@ -23,7 +23,7 @@ class _CompareScreenState extends State<CompareScreen> {
   final _routingService = RoutingService();
   final _fuelService = FuelPriceService();
   final _fuelPreference = FuelPreferenceService();
-  String _fuelType = 'ron95'; // corrected from the user's real saved preference in _calculate()
+  String _fuelType = 'ron95';
 
   bool _loading = true;
   double _driveDistanceKm = 0;
@@ -36,10 +36,6 @@ class _CompareScreenState extends State<CompareScreen> {
   String? _originStationName;
   String? _destStationName;
 
-  // Kept separately (not just folded into _fuelCost) specifically so
-  // it can be DISPLAYED — proving the live API price is genuinely
-  // feeding into the calculation shown right next to it, not just
-  // fetched and hidden.
   double _fuelPricePerLitre = 0;
 
   static const _litresPerKm = 0.07;
@@ -80,13 +76,6 @@ class _CompareScreenState extends State<CompareScreen> {
   double get _savings => (_driveCost - _transitFareEstimate).clamp(0, double.infinity).toDouble();
   bool get _transitIsCheaper => _transitFareEstimate > 0 && _transitFareEstimate < _driveCost;
 
-  /// Both option cards AND the "See Details" button all lead here — the
-  /// actual mode selection happens on the next screen. Making the
-  /// cards tappable too (not just the small button at the bottom)
-  /// matches what their visual design already promises: colored,
-  /// bordered, icon-badged cards naturally look like tappable choices,
-  /// so real user testing found people trying to tap them directly
-  /// instead of noticing the separate button below.
   void _goToDetails() {
     Navigator.push(context, MaterialPageRoute(builder: (_) => RouteDetailsScreen(
       origin: widget.origin,
@@ -109,7 +98,7 @@ class _CompareScreenState extends State<CompareScreen> {
           : ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Route summary card
+
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),
@@ -128,9 +117,6 @@ class _CompareScreenState extends State<CompareScreen> {
           ),
           const SizedBox(height: 16),
 
-          // DRIVE card — purely informational, not tappable;
-          // same neutral styling as the Transit card below so
-          // neither one visually implies it's a selectable choice.
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),
@@ -168,11 +154,7 @@ class _CompareScreenState extends State<CompareScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                // Live fuel price — sits right next to the Fuel cost it
-                // actually produced, so it's visibly proven to be a
-                // real, connected input, not decoration. Small and
-                // secondary, since this is supporting context, not a
-                // primary stat.
+
                 Row(
                   children: [
                     Icon(Icons.bolt, size: 12, color: Colors.grey.shade400),
@@ -188,7 +170,6 @@ class _CompareScreenState extends State<CompareScreen> {
           ),
           const SizedBox(height: 12),
 
-          // TRANSIT card — same neutral white styling as Drive above
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8)]),

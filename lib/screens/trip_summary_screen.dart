@@ -42,18 +42,12 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
     super.initState();
     _controller = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
 
-    // Checkmark "pops" in with a bouncy overshoot.
     _checkScale = CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.6, curve: Curves.elasticOut));
 
-    // Text/cards fade and slide up shortly after, so the eye lands on
-    // the checkmark first.
     _contentFade = CurvedAnimation(parent: _controller, curve: const Interval(0.35, 1.0, curve: Curves.easeOut));
     _contentSlide = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(CurvedAnimation(parent: _controller, curve: const Interval(0.35, 1.0, curve: Curves.easeOut)));
 
-    // Separate, non-elastic fade for confetti — _checkScale uses
-    // elasticOut which can briefly exceed 1.0 (a valid scale value, but
-    // NOT a valid opacity value), so it can't be reused directly here.
     _confettiFade = CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.4, curve: Curves.easeOut));
 
     _controller.forward();
@@ -79,49 +73,39 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
 
     await _db.insertTrip(trip);
 
-    // Only sync to Supabase for a REAL logged-in account — a guest
-    // has no account to ever log back into and retrieve synced data
-    // from, so syncing guest data to one shared cloud table would
-    // just mix every guest's trips together across every device.
     if (_authService.isLoggedIn) {
       try {
         await _supabase.uploadTrip(trip);
       } catch (e) {
-        // ignore: avoid_print
+
         print('Supabase sync failed: $e');
       }
     }
 
-    // Credits this trip's real savings toward EVERY currently active
-    // (not-yet-complete) goal at once — not just a single "first" goal.
-    // This is also what makes a brand-new goal start genuinely at
-    // RM0: it simply isn't in this list yet for any trip completed
-    // before it was created, so it can never retroactively gain
-    // progress from savings that happened earlier.
     if (widget.savedVsAlternative > 0) {
       try {
         final goals = await _db.getGoals();
         for (final goal in goals) {
-          if (goal.progressPercent >= 100) continue; // already complete, don't add more
+          if (goal.progressPercent >= 100) continue;
           final updatedGoal = SavingsGoalModel(
             id: goal.id,
             name: goal.name,
             targetAmount: goal.targetAmount,
             savedAmount: goal.savedAmount + widget.savedVsAlternative,
-            celebrated: goal.celebrated, // preserve — this update must never silently reset it
+            celebrated: goal.celebrated,
           );
           await _db.updateGoal(updatedGoal);
           if (_authService.isLoggedIn) {
             try {
               await _supabase.uploadGoal(updatedGoal);
             } catch (e) {
-              // ignore: avoid_print
+
               print('Supabase goal sync failed (local credit still succeeded): $e');
             }
           }
         }
       } catch (e) {
-        // ignore: avoid_print
+
         print('Updating savings goals failed (trip was still logged fine): $e');
       }
     }
@@ -136,17 +120,15 @@ class _TripSummaryScreenState extends State<TripSummaryScreen> with SingleTicker
   @override
   Widget build(BuildContext context) {
     final hasSavings = widget.savedVsAlternative > 0;
-    // A light, playful "what your savings could buy" comparison — purely
-    // illustrative, not a real product price lookup.
-    final teCups = (widget.savedVsAlternative / 2.5).floor(); // approx RM2.50 per teh tarik
+
+    final teCups = (widget.savedVsAlternative / 2.5).floor();
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(title: const Text('Trip Summary'), automaticallyImplyLeading: false),
       body: Stack(
         children: [
-          // Decorative confetti dots around the checkmark — fade in
-          // together with the checkmark pop animation.
+
           FadeTransition(
             opacity: _confettiFade,
             child: const Stack(

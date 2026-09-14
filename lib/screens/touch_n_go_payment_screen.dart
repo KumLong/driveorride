@@ -3,12 +3,6 @@ import '../models/models.dart';
 import '../services/database_service.dart';
 import '../services/supabase_service.dart';
 
-/// Step 2 of topping up: a SIMULATED Touch & Go eWallet payment
-/// screen. Styled to look like a distinct external app (blue, not
-/// this app's teal) so it reads as "you've been handed off to
-/// another payment provider" — but nothing here actually contacts
-/// Touch & Go; entering any validly-formatted phone number + 6-digit
-/// PIN completes the (simulated) payment and credits the real wallet.
 class TouchNGoPaymentScreen extends StatefulWidget {
   final double amount;
 
@@ -43,7 +37,7 @@ class _TouchNGoPaymentScreenState extends State<TouchNGoPaymentScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _processing = true);
-    // Simulate a brief network round-trip to the payment provider.
+
     await Future.delayed(const Duration(milliseconds: 1200));
 
     await _db.adjustWalletBalance(widget.amount);
@@ -56,7 +50,7 @@ class _TouchNGoPaymentScreenState extends State<TouchNGoPaymentScreen> {
     try {
       await _supabase.uploadWalletTransaction(tx);
     } catch (_) {
-      // Offline or table not set up yet — local copy is already saved.
+
     }
 
     if (!mounted) return;

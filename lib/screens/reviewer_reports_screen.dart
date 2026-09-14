@@ -4,7 +4,7 @@ import '../services/gtfs_service.dart';
 import '../theme.dart';
 
 class ReviewerReportsScreen extends StatefulWidget {
-  final String category; // 'road' or 'rail'
+  final String category;
   const ReviewerReportsScreen({super.key, required this.category});
 
   @override
@@ -82,9 +82,6 @@ class _ReviewerReportsScreenState extends State<ReviewerReportsScreen> with Sing
     return '${diff.inDays} day(s) ago';
   }
 
-  /// Formats a Duration into a readable "X hr Y min" style string —
-  /// used for the "Was active for" insight, showing how long an
-  /// approved issue stayed live before being resolved.
   String _formatDuration(Duration d) {
     if (d.inMinutes < 1) return 'Less than a minute';
     if (d.inHours < 1) return '${d.inMinutes} min';
@@ -166,14 +163,8 @@ class _ReviewerReportsScreenState extends State<ReviewerReportsScreen> with Sing
     return InkWell(onTap: onTap, borderRadius: BorderRadius.circular(14), child: card);
   }
 
-  /// Shows the two pieces of information not already visible on the
-  /// card itself — exactly when this report was actually reviewed,
-  /// and (if applicable) when it was resolved. Genuinely new detail,
-  /// not a repeat of what's already shown.
   void _showReportDetail(RouteReport report) {
-    // Genuinely new, calculated insight — not just a repeated
-    // timestamp — showing how long this issue was actually live
-    // and visible to real users before being cleared.
+
     Duration? activeDuration;
     if (report.reviewedAt != null && report.resolvedAt != null) {
       activeDuration = report.resolvedAt!.difference(report.reviewedAt!);
@@ -275,7 +266,7 @@ class _ReviewerReportsScreenState extends State<ReviewerReportsScreen> with Sing
           : TabBarView(
         controller: _tabController,
         children: [
-          // Pending — Approve / Reject
+
           _pending.isEmpty
               ? _emptyState('No pending reports')
               : RefreshIndicator(
@@ -306,7 +297,6 @@ class _ReviewerReportsScreenState extends State<ReviewerReportsScreen> with Sing
             ),
           ),
 
-          // Active — currently shown to real users, can be Resolved
           _active.isEmpty
               ? _emptyState('No active warnings right now')
               : RefreshIndicator(
@@ -330,10 +320,6 @@ class _ReviewerReportsScreenState extends State<ReviewerReportsScreen> with Sing
             ),
           ),
 
-          // History — full detail browsing of every past
-          // decision, not just a bare count in the stats. Read
-          // only, since these are already decided — a status
-          // badge shows what happened to each one.
           _history.isEmpty
               ? _emptyState('No past decisions yet')
               : RefreshIndicator(
