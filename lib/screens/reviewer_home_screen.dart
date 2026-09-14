@@ -133,7 +133,7 @@ class _ReviewerHomeScreenState extends State<ReviewerHomeScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                const Text('TODAY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
+                const Text('ALL TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
