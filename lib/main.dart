@@ -22,21 +22,16 @@ Future<void> main() async {
     print('GTFS data not loaded yet (add files to assets/gtfs/): $e');
   }
 
-  if (supabaseUrl != 'YOUR_SUPABASE_PROJECT_URL' && supabaseUrl.startsWith('http')) {
-    try {
-      await Supabase.initialize(
-        url: supabaseUrl,
-        anonKey: supabaseAnonKey,
+  try {
+    await Supabase.initialize(
+      url: supabaseUrl,
+      anonKey: supabaseAnonKey,
 
-        authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.implicit),
-      );
-    } catch (e) {
+      authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.implicit),
+    );
+  } catch (e) {
 
-      print('Supabase failed to initialize — check your URL/key: $e');
-    }
-  } else {
-
-    print('Supabase not configured yet — running with local (SQLite) storage only.');
+    print('Supabase failed to initialize — check your URL/key: $e');
   }
 
   runApp(const DriveOrRideApp());
