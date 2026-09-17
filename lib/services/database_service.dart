@@ -45,7 +45,7 @@ class DatabaseService {
       await db.execute(
         "CREATE TABLE IF NOT EXISTS wallet("
             "ownerId TEXT PRIMARY KEY, "
-            "balance REAL DEFAULT 50.0)",
+            "balance REAL DEFAULT 0.0)",
       );
       await db.execute(
         "CREATE TABLE IF NOT EXISTS wallet_transactions("
@@ -62,7 +62,7 @@ class DatabaseService {
     await db.execute(
       "CREATE TABLE wallet("
           "ownerId TEXT PRIMARY KEY, "
-          "balance REAL DEFAULT 50.0)",
+          "balance REAL DEFAULT 0.0)",
     );
     await db.execute(
       "CREATE TABLE wallet_transactions("
@@ -258,8 +258,8 @@ class DatabaseService {
     final db = await database;
     final rows = await db.query('wallet', where: 'ownerId = ?', whereArgs: [_ownerId], limit: 1);
     if (rows.isEmpty) {
-      await db.insert('wallet', {'ownerId': _ownerId, 'balance': 50.0});
-      return 50.0;
+      await db.insert('wallet', {'ownerId': _ownerId, 'balance': 0.0});
+      return 0.0;
     }
     return (rows.first['balance'] as num).toDouble();
   }
